@@ -115,6 +115,7 @@ export default function Index() {
   const fetcher = useFetcher();
   const shopify = useAppBridge();
 
+  const [editingRuleId, setEditingRuleId] = useState("");
   const [instituteKey, setInstituteKey] = useState("");
   const [categoryKey, setCategoryKey] = useState("");
   const [percentage, setPercentage] = useState("0");
@@ -127,6 +128,12 @@ export default function Index() {
     if (!fetcher.data) return;
     if (fetcher.data.ok) {
       shopify.toast.show(fetcher.data.deleted ? "Rule deleted" : "Rule saved");
+      if (!fetcher.data.deleted) {
+        setEditingRuleId("");
+        setInstituteKey("");
+        setCategoryKey("");
+        setPercentage("0");
+      }
     } else if (fetcher.data.error) {
       shopify.toast.show(fetcher.data.error);
     }
@@ -137,6 +144,7 @@ export default function Index() {
   const submitRule = () => {
     const form = new FormData();
     form.set("intent", "save");
+    if (editingRuleId) form.set("ruleId", editingRuleId);
     form.set("instituteKey", instituteKey);
     form.set("categoryKey", categoryKey);
     form.set("percentage", percentage);
@@ -149,6 +157,22 @@ export default function Index() {
     form.set("ruleId", String(ruleId));
     fetcher.submit(form, { method: "POST" });
   };
+
+  const editRule = (rule) => {
+    setEditingRuleId(String(rule.id));
+    setInstituteKey(rule.instituteKey);
+    setCategoryKey(rule.categoryKey);
+    setPercentage(String(rule.percentage));
+  };
+
+  const cancelEdit = () => {
+    setEditingRuleId("");
+    setInstituteKey("");
+    setCategoryKey("");
+    setPercentage("0");
+  };
+
+  const isEditing = Boolean(editingRuleId);
 
   return (
     <s-page heading="Automatic Student Discount Rules">
@@ -223,8 +247,9 @@ export default function Index() {
 
           <s-stack direction="inline" gap="base">
             <s-button onClick={submitRule} {...(isSubmitting ? { loading: true } : {})}>
-              Save rule
+              {isEditing ? "Update rule" : "Save rule"}
             </s-button>
+            {isEditing ? <s-button variant="secondary" onClick={cancelEdit}>Cancel</s-button> : null}
           </s-stack>
         </s-stack>
       </s-section>
@@ -248,6 +273,7 @@ export default function Index() {
                     {rule.categoryLabel} | {rule.percentage}% | {rule.emailDomain}
                   </s-paragraph>
                   <s-stack direction="inline" gap="base">
+                    <s-button onClick={() => editRule(rule)}>Edit</s-button>
                     <s-button tone="critical" onClick={() => deleteRule(rule.id)}>
                       Delete
                     </s-button>
