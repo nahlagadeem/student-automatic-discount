@@ -158,39 +158,59 @@ export default function Index() {
         </s-paragraph>
 
         <s-stack gap="base">
-          <s-select
-            label="Institute"
-            value={instituteKey}
-            onChange={(event) => setInstituteKey(String(event.currentTarget.value || ""))}
-          >
-            <option value="">Choose institute</option>
-            {Object.entries(instituteOptions).map(([segment, institutes]) => (
-              <optgroup key={segment} label={segment}>
-                {institutes.map((option) => (
-                  <option key={option.key} value={option.key}>
-                    {option.label}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </s-select>
+          <label>
+            <div style={{ marginBottom: "0.35rem", fontWeight: 600 }}>Institute</div>
+            <select
+              value={instituteKey}
+              onChange={(event) => setInstituteKey(String(event.currentTarget.value || ""))}
+              style={{
+                width: "100%",
+                minHeight: "44px",
+                borderRadius: "12px",
+                border: "1px solid #8a8a8a",
+                padding: "0 12px",
+                background: "#fff",
+              }}
+            >
+              <option value="">Choose institute</option>
+              {Object.entries(instituteOptions).map(([segment, institutes]) => (
+                <optgroup key={segment} label={segment}>
+                  {institutes.map((option) => (
+                    <option key={option.key} value={option.key}>
+                      {option.label}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
 
           {selectedInstitute ? (
             <s-paragraph>School email domain: {selectedInstitute.domain}</s-paragraph>
           ) : null}
 
-          <s-select
-            label="Category"
-            value={categoryKey}
-            onChange={(event) => setCategoryKey(String(event.currentTarget.value || ""))}
-          >
-            <option value="">Choose category</option>
-            {categories.map((category) => (
-              <option key={category.key} value={category.key}>
-                {category.label}
-              </option>
-            ))}
-          </s-select>
+          <label>
+            <div style={{ marginBottom: "0.35rem", fontWeight: 600 }}>Category</div>
+            <select
+              value={categoryKey}
+              onChange={(event) => setCategoryKey(String(event.currentTarget.value || ""))}
+              style={{
+                width: "100%",
+                minHeight: "44px",
+                borderRadius: "12px",
+                border: "1px solid #8a8a8a",
+                padding: "0 12px",
+                background: "#fff",
+              }}
+            >
+              <option value="">Choose category</option>
+              {categories.map((category) => (
+                <option key={category.key} value={category.key}>
+                  {category.label}
+                </option>
+              ))}
+            </select>
+          </label>
 
           <s-number-field
             label="Discount percentage"
