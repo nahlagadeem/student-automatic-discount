@@ -1,0 +1,45 @@
+query CartInput {
+  cart {
+    lines {
+      id
+      quantity
+      merchandise {
+        __typename
+        ... on ProductVariant {
+          product {
+            ipad: inCollections(ids: ["gid://shopify/Collection/452991221978"]) {
+              isMember
+            }
+            mac: inCollections(ids: ["gid://shopify/Collection/452991746266"]) {
+              isMember
+            }
+            accessories: inCollections(ids: ["gid://shopify/Collection/453527797978"]) {
+              isMember
+            }
+            iphone: inCollections(ids: ["gid://shopify/Collection/452991123674"]) {
+              isMember
+            }
+            appleWatch: inCollections(ids: ["gid://shopify/Collection/52991287514"]) {
+              isMember
+            }
+            tvHome: inCollections(ids: ["gid://shopify/Collection/453560008922"]) {
+              isMember
+            }
+            airpods: inCollections(ids: ["gid://shopify/Collection/453560271066"]) {
+              isMember
+            }
+          }
+        }
+      }
+    }
+  }
+  discount {
+    discountClasses
+    metafield(
+      namespace: "$app:category-tier-discount-native"
+      key: "function-configuration"
+    ) {
+      value
+    }
+  }
+}

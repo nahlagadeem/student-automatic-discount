@@ -1,0 +1,15 @@
+{
+  "name": "Combined Student Discount Settings",
+  "description": "Configure combined student discount behavior",
+  "title": "Collection percentages",
+  "labels": {
+    "ipad": "iPad percentage",
+    "mac": "Mac percentage",
+    "accessories": "Accessories percentage",
+    "iphone": "iPhone percentage",
+    "appleWatch": "Apple Watch percentage",
+    "tvHome": "TV & Home percentage",
+    "airpods": "AirPods percentage"
+  }
+}
+
