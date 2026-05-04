@@ -245,7 +245,7 @@ export default function Index() {
   const isEditing = Boolean(editingRuleId);
 
   return (
-    <s-page heading="Automatic Student Discount Rules">
+    <s-page heading="Automatic Institute Discount Rules">
       <s-section heading="Create or update a rule">
         <s-paragraph>
           Choose an institute, choose a category, and set the automatic discount percentage.

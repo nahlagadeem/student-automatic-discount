@@ -109,7 +109,7 @@ async function handle(request: Request) {
       {
         variables: {
           basicCodeDiscount: {
-            title: `Student Discount ${code}`,
+            title: `Institute Discount ${code}`,
             code,
             startsAt: new Date().toISOString(),
             customerSelection: { all: true },

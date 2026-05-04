@@ -1,8 +1,8 @@
 import prisma from "./db.server";
 import { getInstituteByLabel } from "./institutes";
 
-const DISCOUNT_TITLE = "Combined Student Discount";
-const DISCOUNT_FUNCTION_TITLE = "Combined Student Discount";
+const DISCOUNT_TITLE = "Combined Institute Discount";
+const DISCOUNT_FUNCTION_TITLE = "Combined Institute Discount";
 const CONFIG_NAMESPACE = "$app:category-tier-discount-native";
 const CONFIG_KEY = "function-configuration";
 const DISCOUNT_API_TYPE = "discount";
@@ -155,7 +155,7 @@ async function getDiscountFunctionId(admin) {
   }
 
   const fuzzyMatch = discountNodes.find((node) =>
-    normalizeFunctionTitle(node?.title).includes("student"),
+    /student|institute/.test(normalizeFunctionTitle(node?.title)),
   );
   if (fuzzyMatch?.id) {
     return fuzzyMatch.id;
@@ -394,7 +394,7 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
       : await createAutomaticDiscount(admin, functionId, configValue);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (!discountNodeId || !/not found|invalid id/i.test(message)) {
+    if (!discountNodeId || !/not found|invalid id|does not exist/i.test(message)) {
       throw error;
     }
 

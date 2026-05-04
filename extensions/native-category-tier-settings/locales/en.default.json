@@ -1,6 +1,6 @@
 {
-  "name": "Combined Student Discount Settings",
-  "description": "Configure combined student discount behavior",
+  "name": "Combined Institute Discount Settings",
+  "description": "Configure combined institute discount behavior",
   "title": "Automatic discount rules",
   "managedInApp": "This discount is managed from the app home rule editor. Changes here are read-only.",
   "emptyState": "No active rules are synced to this discount yet."
