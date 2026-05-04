@@ -1,5 +1,11 @@
 query CartInput {
   cart {
+    buyerIdentity {
+      email
+      customer {
+        email
+      }
+    }
     lines {
       id
       quantity

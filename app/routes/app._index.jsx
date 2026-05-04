@@ -5,6 +5,10 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { ensureAutomaticDiscountRuleTable } from "../automatic-discount-rules.server";
 import {
+  ensureAutomaticDiscountConfigTable,
+  syncAutomaticDiscountRules,
+} from "../discount-function-config.server";
+import {
   buildInstituteOptions,
   getCategoryByKey,
   getInstituteByKey,
@@ -25,6 +29,7 @@ const INSTITUTE_OPTIONS = buildInstituteOptions();
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   await ensureAutomaticDiscountRuleTable();
+  await ensureAutomaticDiscountConfigTable();
 
   const rules = await prisma.automaticDiscountRule.findMany({
     where: { shop: session.shop },
@@ -40,8 +45,9 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   await ensureAutomaticDiscountRuleTable();
+  await ensureAutomaticDiscountConfigTable();
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "save").trim();
@@ -59,7 +65,13 @@ export const action = async ({ request }) => {
       },
     });
 
-    return { ok: true, deleted: true };
+    const rules = await prisma.automaticDiscountRule.findMany({
+      where: { shop: session.shop },
+      orderBy: [{ instituteLabel: "asc" }, { categoryLabel: "asc" }],
+    });
+    const syncResult = await syncAutomaticDiscountRules({ admin, shop: session.shop, rules });
+
+    return { ok: true, deleted: true, syncResult };
   }
 
   const instituteKey = String(formData.get("instituteKey") || "").trim();
@@ -104,9 +116,16 @@ export const action = async ({ request }) => {
     },
   });
 
+  const rules = await prisma.automaticDiscountRule.findMany({
+    where: { shop: session.shop },
+    orderBy: [{ instituteLabel: "asc" }, { categoryLabel: "asc" }],
+  });
+  const syncResult = await syncAutomaticDiscountRules({ admin, shop: session.shop, rules });
+
   return {
     ok: true,
     savedRule,
+    syncResult,
   };
 };
 
