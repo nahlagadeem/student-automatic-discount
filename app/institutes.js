@@ -34,6 +34,16 @@ export const PRODUCT_CATEGORIES = [
   { key: "airpods", label: "AirPods" },
 ];
 
+export const CATEGORY_COLLECTION_IDS = {
+  ipad: "gid://shopify/Collection/452991221978",
+  mac: "gid://shopify/Collection/452991746266",
+  accessories: "gid://shopify/Collection/453527797978",
+  iphone: "gid://shopify/Collection/452991123674",
+  "apple-watch": "gid://shopify/Collection/52991287514",
+  "tv-home": "gid://shopify/Collection/453560008922",
+  airpods: "gid://shopify/Collection/453560271066",
+};
+
 const CATEGORY_BY_KEY = new Map(PRODUCT_CATEGORIES.map((category) => [category.key, category]));
 
 export function getInstituteByKey(key) {

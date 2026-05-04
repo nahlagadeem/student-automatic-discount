@@ -1,0 +1,6 @@
+api_version = "2026-01"
+
+[[extensions]]
+name = "Student Pricing Storefront"
+handle = "student-pricing-storefront"
+type = "theme"

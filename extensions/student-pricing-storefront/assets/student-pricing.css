@@ -1,0 +1,33 @@
+.student-pricing-original {
+  text-decoration: line-through;
+  opacity: 0.72;
+}
+
+.student-pricing-preview {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.45rem;
+  margin-top: 0.2rem;
+  font-size: 0.95em;
+  line-height: 1.25;
+}
+
+.student-pricing-preview.is-inline {
+  display: inline-flex;
+  margin-inline-start: 0.5rem;
+  margin-top: 0;
+}
+
+.student-pricing-preview__label {
+  font-size: 0.78em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(18, 18, 18, 0.65);
+}
+
+.student-pricing-preview__price {
+  font-weight: 700;
+  color: #0f6a43;
+}
