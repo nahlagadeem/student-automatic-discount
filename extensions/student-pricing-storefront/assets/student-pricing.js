@@ -144,8 +144,9 @@
   }
 
   async function fetchPricing(config, handles) {
-    const url = new URL(config.dataset.endpoint, window.location.origin);
-    url.searchParams.set("shop", config.dataset.shop || window.location.hostname);
+    const endpoint = config.dataset.endpoint || "/apps/student-automatic-discount/proxy/student-pricing";
+    const url = new URL(endpoint, window.location.origin);
+    url.searchParams.set("shop", config.dataset.shop || "");
     url.searchParams.set("logged_in_customer_id", config.dataset.customerId || "");
     url.searchParams.set("handles", handles.join(","));
 
@@ -155,7 +156,8 @@
     });
 
     if (!response.ok) {
-      throw new Error(`Student pricing request failed with ${response.status}`);
+      const bodyText = await response.text().catch(() => "");
+      throw new Error(`Student pricing request failed with ${response.status}: ${bodyText}`);
     }
 
     return response.json();

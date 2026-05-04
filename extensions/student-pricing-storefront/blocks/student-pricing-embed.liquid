@@ -3,8 +3,8 @@
     id="student-pricing-config-{{ block.id }}"
     class="student-pricing-config"
     hidden
-    data-endpoint="{{ shop.secure_url }}/apps/student-automatic-discount/proxy/student-pricing"
-    data-shop="{{ shop.permanent_domain }}"
+    data-endpoint="/apps/student-automatic-discount/proxy/student-pricing"
+    data-shop="{{ shop.myshopify_domain }}"
     data-customer-id="{{ customer.id }}"
   ></div>
 {% endif %}
