@@ -68,6 +68,18 @@ function getBuyerEmailDomain(input: CartInput): string {
   return normalizeEmailDomain(buyerEmail);
 }
 
+function getBuyerInstituteKeyFromTags(input: CartInput): string {
+  const matches = input.cart.buyerIdentity?.customer?.hasTags ?? [];
+  for (const match of matches) {
+    if (!match?.hasTag) continue;
+    const tag = String(match.tag || "").trim();
+    if (tag.startsWith("student_institute:")) {
+      return tag.slice("student_institute:".length);
+    }
+  }
+  return "";
+}
+
 function readTierConfig(input: CartInput): TierConfig {
   const rawValue = input.discount.metafield?.value;
   if (!rawValue) return DEFAULT_CONFIG;
@@ -96,11 +108,17 @@ function readRuleConfig(input: CartInput): MatchedRule[] {
     const parsed = JSON.parse(rawValue) as RuleConfig;
     if (!Array.isArray(parsed.rules)) return [];
 
+    const buyerInstituteKey = getBuyerInstituteKeyFromTags(input);
     const buyerEmailDomain = getBuyerEmailDomain(input);
-    if (!buyerEmailDomain) return [];
+    if (!buyerInstituteKey && !buyerEmailDomain) return [];
 
     return parsed.rules
-      .filter((rule) => normalizeEmailDomain(rule.emailDomain) === buyerEmailDomain)
+      .filter((rule) => {
+        if (buyerInstituteKey && String(rule.instituteKey || "").trim() === buyerInstituteKey) {
+          return true;
+        }
+        return normalizeEmailDomain(rule.emailDomain) === buyerEmailDomain;
+      })
       .map((rule) => ({
         categoryKey: String(rule.categoryKey || "").trim(),
         percentage: clampPercentage(rule.percentage, 0),

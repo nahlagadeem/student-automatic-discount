@@ -1,10 +1,13 @@
 import prisma from "./db.server";
+import { INSTITUTES, getInstituteByLabel } from "./institutes";
 
 const DISCOUNT_TITLE = "Combined Student Discount";
 const DISCOUNT_FUNCTION_TITLE = "Combined Student Discount";
 const CONFIG_NAMESPACE = "$app:category-tier-discount-native";
 const CONFIG_KEY = "function-configuration";
 const DISCOUNT_API_TYPE = "discount";
+const CUSTOMER_PORTAL_TAG = "student_portal";
+const CUSTOMER_INSTITUTE_TAG_PREFIX = "student_institute:";
 
 export async function ensureAutomaticDiscountConfigTable() {
   await prisma.$executeRawUnsafe(`
@@ -77,6 +80,16 @@ async function runAdminGraphql(admin, query, variables) {
 
   return payload?.data ?? null;
 }
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function instituteTag(key) {
+  return `${CUSTOMER_INSTITUTE_TAG_PREFIX}${String(key || "").trim()}`;
+}
+
+const ALL_INSTITUTE_TAGS = INSTITUTES.map((institute) => instituteTag(institute.key));
 
 function normalizeFunctionTitle(value) {
   return String(value || "").trim().toLowerCase();
@@ -161,6 +174,121 @@ async function createAutomaticDiscount(admin, functionId, configValue) {
   }
 
   return discountNodeId;
+}
+
+async function findCustomerIdsByEmail(admin, email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return [];
+
+  const data = await runAdminGraphql(
+    admin,
+    `#graphql
+      query FindCustomerIdsByEmail($query: String!) {
+        customers(first: 10, query: $query) {
+          nodes {
+            id
+          }
+        }
+      }
+    `,
+    {
+      query: `email:${normalizedEmail}`,
+    },
+  );
+
+  return (data?.customers?.nodes ?? [])
+    .map((customer) => String(customer?.id || "").trim())
+    .filter(Boolean);
+}
+
+async function updateCustomerInstituteTags(admin, customerId, instituteKey) {
+  await runAdminGraphql(
+    admin,
+    `#graphql
+      mutation RemoveInstituteTags($id: ID!, $tags: [String!]!) {
+        tagsRemove(id: $id, tags: $tags) {
+          userErrors {
+            message
+          }
+        }
+      }
+    `,
+    {
+      id: customerId,
+      tags: ALL_INSTITUTE_TAGS,
+    },
+  );
+
+  await runAdminGraphql(
+    admin,
+    `#graphql
+      mutation AddInstituteTags($id: ID!, $tags: [String!]!) {
+        tagsAdd(id: $id, tags: $tags) {
+          userErrors {
+            message
+          }
+        }
+      }
+    `,
+    {
+      id: customerId,
+      tags: [CUSTOMER_PORTAL_TAG, instituteTag(instituteKey)],
+    },
+  );
+}
+
+export async function syncPortalUsersToCustomerTags({ admin, rules }) {
+  const activeInstituteLabels = Array.from(
+    new Set(
+      rules
+        .filter((rule) => rule.isActive !== false && Number(rule.percentage) > 0)
+        .map((rule) => String(rule.instituteLabel || "").trim())
+        .filter(Boolean),
+    ),
+  );
+
+  if (!activeInstituteLabels.length) {
+    return { syncedCustomerCount: 0, syncedUserCount: 0 };
+  }
+
+  const portalUsers = await prisma.portalUser.findMany({
+    where: {
+      institute: { in: activeInstituteLabels },
+    },
+    select: {
+      id: true,
+      email: true,
+      schoolEmail: true,
+      institute: true,
+    },
+  });
+
+  const customerAssignments = new Map();
+
+  for (const user of portalUsers) {
+    const institute = getInstituteByLabel(user.institute);
+    if (!institute?.key) continue;
+
+    const emails = Array.from(
+      new Set([normalizeEmail(user.email), normalizeEmail(user.schoolEmail)].filter(Boolean)),
+    );
+
+    for (const email of emails) {
+      const customerIds = await findCustomerIdsByEmail(admin, email);
+      for (const customerId of customerIds) {
+        customerAssignments.set(customerId, institute.key);
+      }
+    }
+  }
+
+  for (const [customerId, instituteKey] of customerAssignments.entries()) {
+    await updateCustomerInstituteTags(admin, customerId, instituteKey);
+  }
+
+  return {
+    syncedCustomerCount: customerAssignments.size,
+    syncedUserCount: portalUsers.length,
+  };
 }
 
 async function updateAutomaticDiscount(admin, discountNodeId, configValue) {
