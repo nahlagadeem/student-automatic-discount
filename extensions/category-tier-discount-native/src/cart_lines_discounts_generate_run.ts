@@ -69,15 +69,7 @@ function getBuyerEmailDomain(input: CartInput): string {
 }
 
 function getBuyerInstituteKeyFromTags(input: CartInput): string {
-  const matches = input.cart.buyerIdentity?.customer?.hasTags ?? [];
-  for (const match of matches) {
-    if (!match?.hasTag) continue;
-    const tag = String(match.tag || "").trim();
-    if (tag.startsWith("student_institute:")) {
-      return tag.slice("student_institute:".length);
-    }
-  }
-  return "";
+  return String(input.cart.buyerIdentity?.customer?.metafield?.value || "").trim();
 }
 
 function readTierConfig(input: CartInput): TierConfig {

@@ -4,29 +4,8 @@ query CartInput {
       email
       customer {
         email
-        hasTags(tags: [
-          "student_institute:owis-riyadh"
-          "student_institute:sek"
-          "student_institute:riyadh-schools-malqa"
-          "student_institute:riyadh-schools-hittin"
-          "student_institute:bisr"
-          "student_institute:bisj"
-          "student_institute:aisr"
-          "student_institute:aldenham"
-          "student_institute:king-faisal-school"
-          "student_institute:brooke-house"
-          "student_institute:pnu"
-          "student_institute:alfaisal"
-          "student_institute:imamu"
-          "student_institute:kau"
-          "student_institute:aou"
-          "student_institute:kaust"
-          "student_institute:mu"
-          "student_institute:ksu"
-          "student_institute:kfupm"
-        ]) {
-          tag
-          hasTag
+        metafield(namespace: "$app:student-discount", key: "institute_key") {
+          value
         }
       }
     }

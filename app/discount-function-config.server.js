@@ -1,13 +1,13 @@
 import prisma from "./db.server";
-import { INSTITUTES, getInstituteByLabel } from "./institutes";
+import { getInstituteByLabel } from "./institutes";
 
 const DISCOUNT_TITLE = "Combined Student Discount";
 const DISCOUNT_FUNCTION_TITLE = "Combined Student Discount";
 const CONFIG_NAMESPACE = "$app:category-tier-discount-native";
 const CONFIG_KEY = "function-configuration";
 const DISCOUNT_API_TYPE = "discount";
-const CUSTOMER_PORTAL_TAG = "student_portal";
-const CUSTOMER_INSTITUTE_TAG_PREFIX = "student_institute:";
+const CUSTOMER_IDENTITY_NAMESPACE = "$app:student-discount";
+const CUSTOMER_INSTITUTE_KEY = "institute_key";
 
 export async function ensureAutomaticDiscountConfigTable() {
   await prisma.$executeRawUnsafe(`
@@ -84,12 +84,6 @@ async function runAdminGraphql(admin, query, variables) {
 function normalizeEmail(value) {
   return String(value || "").trim().toLowerCase();
 }
-
-function instituteTag(key) {
-  return `${CUSTOMER_INSTITUTE_TAG_PREFIX}${String(key || "").trim()}`;
-}
-
-const ALL_INSTITUTE_TAGS = INSTITUTES.map((institute) => instituteTag(institute.key));
 
 function normalizeFunctionTitle(value) {
   return String(value || "").trim().toLowerCase();
@@ -222,12 +216,17 @@ async function findCustomerIdsByEmail(admin, email) {
     .filter(Boolean);
 }
 
-async function updateCustomerInstituteTags(admin, customerId, instituteKey) {
-  await runAdminGraphql(
+async function setCustomerInstituteMetafield(admin, customerId, instituteKey) {
+  const data = await runAdminGraphql(
     admin,
     `#graphql
-      mutation RemoveInstituteTags($id: ID!, $tags: [String!]!) {
-        tagsRemove(id: $id, tags: $tags) {
+      mutation SetCustomerInstituteMetafield($metafields: [MetafieldsSetInput!]!) {
+        metafieldsSet(metafields: $metafields) {
+          metafields {
+            key
+            namespace
+            value
+          }
           userErrors {
             message
           }
@@ -235,27 +234,22 @@ async function updateCustomerInstituteTags(admin, customerId, instituteKey) {
       }
     `,
     {
-      id: customerId,
-      tags: ALL_INSTITUTE_TAGS,
+      metafields: [
+        {
+          ownerId: customerId,
+          namespace: CUSTOMER_IDENTITY_NAMESPACE,
+          key: CUSTOMER_INSTITUTE_KEY,
+          type: "single_line_text_field",
+          value: String(instituteKey || "").trim(),
+        },
+      ],
     },
   );
 
-  await runAdminGraphql(
-    admin,
-    `#graphql
-      mutation AddInstituteTags($id: ID!, $tags: [String!]!) {
-        tagsAdd(id: $id, tags: $tags) {
-          userErrors {
-            message
-          }
-        }
-      }
-    `,
-    {
-      id: customerId,
-      tags: [CUSTOMER_PORTAL_TAG, instituteTag(instituteKey)],
-    },
-  );
+  const userErrors = data?.metafieldsSet?.userErrors ?? [];
+  if (userErrors.length) {
+    throw new Error(userErrors.map((error) => error.message).join("; "));
+  }
 }
 
 export async function syncPortalUsersToCustomerTags({ admin, rules }) {
@@ -303,7 +297,7 @@ export async function syncPortalUsersToCustomerTags({ admin, rules }) {
   }
 
   for (const [customerId, instituteKey] of customerAssignments.entries()) {
-    await updateCustomerInstituteTags(admin, customerId, instituteKey);
+    await setCustomerInstituteMetafield(admin, customerId, instituteKey);
   }
 
   return {
