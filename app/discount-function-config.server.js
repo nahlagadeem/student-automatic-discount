@@ -65,13 +65,43 @@ function parseGraphqlPayload(payloadText) {
   }
 }
 
+function summarizeGraphqlPayload(payloadText) {
+  const payload = parseGraphqlPayload(payloadText);
+  const messages = [];
+
+  if (Array.isArray(payload?.errors)) {
+    for (const error of payload.errors) {
+      const message = String(error?.message || "").trim();
+      if (message) messages.push(message);
+    }
+  }
+
+  const userErrors = [
+    ...(payload?.data?.discountAutomaticAppCreate?.userErrors ?? []),
+    ...(payload?.data?.discountAutomaticAppUpdate?.userErrors ?? []),
+    ...(payload?.data?.metafieldsSet?.userErrors ?? []),
+  ];
+
+  for (const error of userErrors) {
+    const message = String(error?.message || "").trim();
+    if (message) messages.push(message);
+  }
+
+  if (messages.length) {
+    return messages.slice(0, 5).join("; ");
+  }
+
+  const compact = String(payloadText || "").replace(/\s+/g, " ").trim();
+  return compact.length > 240 ? `${compact.slice(0, 240)}...` : compact;
+}
+
 async function runAdminGraphql(admin, query, variables) {
   const response = await admin.graphql(query, { variables });
   const payloadText = await response.text();
   const payload = parseGraphqlPayload(payloadText);
 
   if (!response.ok) {
-    throw new Error(`Admin API HTTP ${response.status}: ${payloadText}`);
+    throw new Error(`Admin API HTTP ${response.status}: ${summarizeGraphqlPayload(payloadText)}`);
   }
 
   if (payload?.errors?.length) {

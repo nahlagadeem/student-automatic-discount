@@ -62,13 +62,29 @@ function parseGraphqlPayload(payloadText: string) {
   }
 }
 
+function summarizeGraphqlPayload(payloadText: string) {
+  const payload = parseGraphqlPayload(payloadText);
+  const messages = Array.isArray(payload?.errors)
+    ? payload.errors
+        .map((error: { message?: string }) => String(error?.message || "").trim())
+        .filter(Boolean)
+    : [];
+
+  if (messages.length) {
+    return messages.slice(0, 5).join("; ");
+  }
+
+  const compact = String(payloadText || "").replace(/\s+/g, " ").trim();
+  return compact.length > 240 ? `${compact.slice(0, 240)}...` : compact;
+}
+
 async function runAdminGraphql(admin: GraphqlClient, query: string, variables?: Record<string, unknown>) {
   const response = await admin.graphql(query, { variables });
   const payloadText = await response.text();
   const payload = parseGraphqlPayload(payloadText);
 
   if (!response.ok) {
-    throw new Error(`Admin API HTTP ${response.status}: ${payloadText}`);
+    throw new Error(`Admin API HTTP ${response.status}: ${summarizeGraphqlPayload(payloadText)}`);
   }
 
   if (payload?.errors?.length) {

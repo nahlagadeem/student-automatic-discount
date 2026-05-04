@@ -23,6 +23,7 @@
 
   let scanTimer = 0;
   let observer = null;
+  let requestToken = 0;
 
   function getConfig() {
     return document.querySelector(CONFIG_SELECTOR);
@@ -46,18 +47,27 @@
     return match ? decodeURIComponent(match[1]).trim().toLowerCase() : "";
   }
 
-  function findVisiblePriceElement(root) {
+  function isIgnoredPriceElement(candidate) {
+    return candidate.closest(".student-pricing-preview") || candidate.classList.contains("student-pricing-preview");
+  }
+
+  function findVisiblePriceElements(root) {
     const candidates = root.querySelectorAll(PRICE_SELECTOR);
+    const matches = [];
+    const seen = new Set();
+
     for (const candidate of candidates) {
       if (!(candidate instanceof HTMLElement)) continue;
-      if (candidate.closest(".student-pricing-preview")) continue;
+      if (isIgnoredPriceElement(candidate)) continue;
       const text = candidate.textContent || "";
       if (!/\d/.test(text)) continue;
       const style = window.getComputedStyle(candidate);
       if (style.display === "none" || style.visibility === "hidden") continue;
-      return candidate;
+      if (seen.has(candidate)) continue;
+      seen.add(candidate);
+      matches.push(candidate);
     }
-    return null;
+    return matches;
   }
 
   function parseMoney(text) {
@@ -94,6 +104,18 @@
     return `${parsedMoney.prefix}${discountedAmount.toFixed(Math.min(Math.max(parsedMoney.decimals, 0), 2))}${parsedMoney.suffix}`.trim();
   }
 
+  function getOriginalPriceText(priceElement) {
+    const stored = String(priceElement.dataset.studentPricingOriginalText || "").trim();
+    if (stored) return stored;
+
+    const current = String(priceElement.textContent || "").trim();
+    if (current) {
+      priceElement.dataset.studentPricingOriginalText = current;
+    }
+
+    return current;
+  }
+
   function buildPreview(priceElement, discountedText, percentage) {
     const existing = priceElement.parentElement && priceElement.parentElement.querySelector(".student-pricing-preview");
     if (existing) existing.remove();
@@ -123,11 +145,11 @@
         document.querySelector('#MainContent') ||
         document.body;
       if (productRoot instanceof HTMLElement) {
-        const priceElement = findVisiblePriceElement(productRoot);
-        if (priceElement) {
+        const priceElements = findVisiblePriceElements(productRoot);
+        if (priceElements.length) {
           const key = `${productPageHandle}::product-page`;
           seen.add(key);
-          targets.push({ handle: productPageHandle, priceElement, key });
+          targets.push({ handle: productPageHandle, priceElements, key });
         }
       }
     }
@@ -141,8 +163,8 @@
       const root = link.closest(CARD_ROOT_SELECTOR) || link.parentElement;
       if (!(root instanceof HTMLElement)) continue;
 
-      const priceElement = findVisiblePriceElement(root);
-      if (!priceElement) continue;
+      const priceElements = findVisiblePriceElements(root);
+      if (!priceElements.length) continue;
 
       if (!root.dataset.studentPricingKey) {
         root.dataset.studentPricingKey = `${handle}-${seen.size + 1}`;
@@ -150,7 +172,7 @@
       const key = `${handle}::${root.dataset.studentPricingKey}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      targets.push({ handle, priceElement, key });
+      targets.push({ handle, priceElements, key });
     }
 
     return targets;
@@ -170,13 +192,15 @@
 
     if (!response.ok) {
       const bodyText = await response.text().catch(() => "");
-      throw new Error(`Student pricing request failed with ${response.status}: ${bodyText}`);
+      const summary = bodyText.length > 240 ? `${bodyText.slice(0, 240)}...` : bodyText;
+      throw new Error(`Student pricing request failed with ${response.status}: ${summary}`);
     }
 
     return response.json();
   }
 
   async function applyStudentPricing() {
+    const currentToken = ++requestToken;
     const config = getConfig();
     if (!(config instanceof HTMLElement)) return;
     if (!config.dataset.customerId) return;
@@ -193,6 +217,7 @@
       return;
     }
 
+    if (currentToken !== requestToken) return;
     if (!payload || !payload.ok || !payload.byHandle) return;
 
     if (observer) {
@@ -205,11 +230,13 @@
         const percentage = Number(pricing && pricing.percentage);
         if (!Number.isFinite(percentage) || percentage <= 0) continue;
 
-        const parsedMoney = parseMoney(target.priceElement.textContent || "");
-        if (!parsedMoney || parsedMoney.amount <= 0) continue;
+        for (const priceElement of target.priceElements) {
+          const parsedMoney = parseMoney(getOriginalPriceText(priceElement));
+          if (!parsedMoney || parsedMoney.amount <= 0) continue;
 
-        const discountedAmount = parsedMoney.amount * (1 - percentage / 100);
-        buildPreview(target.priceElement, formatMoney(parsedMoney, discountedAmount), percentage);
+          const discountedAmount = parsedMoney.amount * (1 - percentage / 100);
+          buildPreview(priceElement, formatMoney(parsedMoney, discountedAmount), percentage);
+        }
       }
     } finally {
       if (observer) {

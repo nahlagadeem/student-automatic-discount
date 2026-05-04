@@ -26,6 +26,34 @@ function clampPercentage(value) {
   return Math.round(parsed);
 }
 
+function summarizeActionResult(data) {
+  if (!data) return "";
+
+  const lines = [];
+  lines.push(`ok: ${Boolean(data.ok)}`);
+
+  if (data.error) lines.push(`error: ${data.error}`);
+  if (data.warning) lines.push(`warning: ${data.warning}`);
+  if (data.deleted) lines.push("action: rule deleted");
+  if (data.savedRule) {
+    lines.push(
+      `saved: ${data.savedRule.instituteLabel} | ${data.savedRule.categoryLabel} | ${data.savedRule.percentage}%`
+    );
+  }
+  if (data.syncResult) {
+    lines.push(
+      `discount sync: ${data.syncResult.ruleCount || 0} rules, node ${data.syncResult.discountNodeId || "n/a"}`
+    );
+  }
+  if (data.portalSyncResult) {
+    lines.push(
+      `portal sync: ${data.portalSyncResult.syncedUserCount || 0} users, ${data.portalSyncResult.syncedCustomerCount || 0} customers`
+    );
+  }
+
+  return lines.join("\n");
+}
+
 const INSTITUTE_OPTIONS = buildInstituteOptions();
 
 export const loader = async ({ request }) => {
@@ -181,6 +209,7 @@ export default function Index() {
   }, [fetcher.data, shopify]);
 
   const selectedInstitute = useMemo(() => getInstituteByKey(instituteKey), [instituteKey]);
+  const actionSummary = useMemo(() => summarizeActionResult(fetcher.data), [fetcher.data]);
 
   const submitRule = () => {
     const form = new FormData();
@@ -330,7 +359,7 @@ export default function Index() {
         <s-section heading="Last action result">
           <s-box padding="base" borderWidth="base" borderRadius="base" background="subdued">
             <pre style={{ margin: 0 }}>
-              <code>{JSON.stringify(fetcher.data, null, 2)}</code>
+              <code>{actionSummary}</code>
             </pre>
           </s-box>
         </s-section>

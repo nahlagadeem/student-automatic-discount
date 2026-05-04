@@ -3,4 +3,5 @@ api_version = "2026-01"
 [[extensions]]
 name = "Student Pricing Storefront"
 handle = "student-pricing-storefront"
+uid = "0a060dfa-d45c-d0a5-922c-e86027daa71146838520"
 type = "theme"
