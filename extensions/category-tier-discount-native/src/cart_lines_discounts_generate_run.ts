@@ -55,19 +55,6 @@ function clampPercentage(value: unknown, fallback: number): number {
   return numberValue;
 }
 
-function normalizeEmailDomain(value: string | null | undefined): string {
-  const normalized = String(value || "").trim().toLowerCase();
-  if (!normalized) return "";
-  if (normalized.startsWith("@")) return normalized;
-  return normalized.includes("@") ? `@${normalized.split("@")[1]}` : `@${normalized}`;
-}
-
-function getBuyerEmailDomain(input: CartInput): string {
-  const buyerEmail =
-    input.cart.buyerIdentity?.customer?.email || input.cart.buyerIdentity?.email || "";
-  return normalizeEmailDomain(buyerEmail);
-}
-
 function getBuyerInstituteKeyFromTags(input: CartInput): string {
   return String(input.cart.buyerIdentity?.customer?.metafield?.value || "").trim();
 }
@@ -101,16 +88,10 @@ function readRuleConfig(input: CartInput): MatchedRule[] {
     if (!Array.isArray(parsed.rules)) return [];
 
     const buyerInstituteKey = getBuyerInstituteKeyFromTags(input);
-    const buyerEmailDomain = getBuyerEmailDomain(input);
-    if (!buyerInstituteKey && !buyerEmailDomain) return [];
+    if (!buyerInstituteKey) return [];
 
     return parsed.rules
-      .filter((rule) => {
-        if (buyerInstituteKey && String(rule.instituteKey || "").trim() === buyerInstituteKey) {
-          return true;
-        }
-        return normalizeEmailDomain(rule.emailDomain) === buyerEmailDomain;
-      })
+      .filter((rule) => String(rule.instituteKey || "").trim() === buyerInstituteKey)
       .map((rule) => ({
         categoryKey: String(rule.categoryKey || "").trim(),
         percentage: clampPercentage(rule.percentage, 0),

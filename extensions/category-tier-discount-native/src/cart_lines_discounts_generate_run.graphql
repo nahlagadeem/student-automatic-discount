@@ -1,9 +1,7 @@
 query CartInput {
   cart {
     buyerIdentity {
-      email
       customer {
-        email
         metafield(namespace: "$app:student-discount", key: "institute_key") {
           value
         }
