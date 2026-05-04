@@ -112,17 +112,38 @@ async function getDiscountFunctionId(admin) {
   );
 
   const nodes = data?.shopifyFunctions?.nodes ?? [];
-  const match = nodes.find(
+  const discountNodes = nodes.filter(
+    (node) => String(node?.apiType || "").trim().toLowerCase() === DISCOUNT_API_TYPE,
+  );
+
+  const exactMatch = discountNodes.find(
     (node) =>
       normalizeFunctionTitle(node?.title) === normalizeFunctionTitle(DISCOUNT_FUNCTION_TITLE) &&
       String(node?.apiType || "").trim().toLowerCase() === DISCOUNT_API_TYPE,
   );
 
-  if (!match?.id) {
-    throw new Error(`Unable to locate Shopify discount function "${DISCOUNT_FUNCTION_TITLE}".`);
+  if (exactMatch?.id) {
+    return exactMatch.id;
   }
 
-  return match.id;
+  if (discountNodes.length === 1 && discountNodes[0]?.id) {
+    return discountNodes[0].id;
+  }
+
+  const fuzzyMatch = discountNodes.find((node) =>
+    normalizeFunctionTitle(node?.title).includes("student"),
+  );
+  if (fuzzyMatch?.id) {
+    return fuzzyMatch.id;
+  }
+
+  const availableTitles = discountNodes
+    .map((node) => String(node?.title || "").trim())
+    .filter(Boolean)
+    .join(", ");
+  throw new Error(
+    `Unable to locate Shopify discount function "${DISCOUNT_FUNCTION_TITLE}". Available discount functions: ${availableTitles || "none"}.`,
+  );
 }
 
 async function createAutomaticDiscount(admin, functionId, configValue) {
