@@ -6,6 +6,7 @@ import prisma from "../db.server";
 import { ensureAutomaticDiscountRuleTable } from "../automatic-discount-rules.server";
 import {
   ensureAutomaticDiscountConfigTable,
+  syncErrorMessage,
   syncAutomaticDiscountRules,
 } from "../discount-function-config.server";
 import {
@@ -69,9 +70,16 @@ export const action = async ({ request }) => {
       where: { shop: session.shop },
       orderBy: [{ instituteLabel: "asc" }, { categoryLabel: "asc" }],
     });
-    const syncResult = await syncAutomaticDiscountRules({ admin, shop: session.shop, rules });
-
-    return { ok: true, deleted: true, syncResult };
+    try {
+      const syncResult = await syncAutomaticDiscountRules({ admin, shop: session.shop, rules });
+      return { ok: true, deleted: true, syncResult };
+    } catch (error) {
+      return {
+        ok: true,
+        deleted: true,
+        warning: `Rule deleted locally, but Shopify discount sync failed: ${syncErrorMessage(error)}`,
+      };
+    }
   }
 
   const instituteKey = String(formData.get("instituteKey") || "").trim();
@@ -120,13 +128,21 @@ export const action = async ({ request }) => {
     where: { shop: session.shop },
     orderBy: [{ instituteLabel: "asc" }, { categoryLabel: "asc" }],
   });
-  const syncResult = await syncAutomaticDiscountRules({ admin, shop: session.shop, rules });
+  try {
+    const syncResult = await syncAutomaticDiscountRules({ admin, shop: session.shop, rules });
 
-  return {
-    ok: true,
-    savedRule,
-    syncResult,
-  };
+    return {
+      ok: true,
+      savedRule,
+      syncResult,
+    };
+  } catch (error) {
+    return {
+      ok: true,
+      savedRule,
+      warning: `Rule saved locally, but Shopify discount sync failed: ${syncErrorMessage(error)}`,
+    };
+  }
 };
 
 export default function Index() {
@@ -146,7 +162,9 @@ export default function Index() {
   useEffect(() => {
     if (!fetcher.data) return;
     if (fetcher.data.ok) {
-      shopify.toast.show(fetcher.data.deleted ? "Rule deleted" : "Rule saved");
+      shopify.toast.show(
+        fetcher.data.warning || (fetcher.data.deleted ? "Rule deleted" : "Rule saved")
+      );
       if (!fetcher.data.deleted) {
         setEditingRuleId("");
         setInstituteKey("");

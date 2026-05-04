@@ -4,6 +4,7 @@ const DISCOUNT_TITLE = "Combined Student Discount";
 const DISCOUNT_FUNCTION_TITLE = "Combined Student Discount";
 const CONFIG_NAMESPACE = "$app:category-tier-discount-native";
 const CONFIG_KEY = "function-configuration";
+const DISCOUNT_API_TYPE = "discount";
 
 export async function ensureAutomaticDiscountConfigTable() {
   await prisma.$executeRawUnsafe(`
@@ -24,18 +25,32 @@ export async function ensureAutomaticDiscountConfigTable() {
 }
 
 export function buildFunctionConfiguration(rules) {
+  const activeRules = rules
+    .filter((rule) => rule.isActive !== false && Number(rule.percentage) > 0)
+    .map((rule) => ({
+      instituteKey: rule.instituteKey,
+      instituteLabel: rule.instituteLabel,
+      emailDomain: String(rule.emailDomain || "").trim().toLowerCase(),
+      categoryKey: rule.categoryKey,
+      categoryLabel: rule.categoryLabel,
+      percentage: Number(rule.percentage),
+    }));
+
+  const highestPercentageFor = (categoryKey) =>
+    activeRules
+      .filter((rule) => rule.categoryKey === categoryKey)
+      .reduce((max, rule) => Math.max(max, rule.percentage), 0);
+
   return {
     version: 2,
-    rules: rules
-      .filter((rule) => rule.isActive !== false && Number(rule.percentage) > 0)
-      .map((rule) => ({
-        instituteKey: rule.instituteKey,
-        instituteLabel: rule.instituteLabel,
-        emailDomain: String(rule.emailDomain || "").trim().toLowerCase(),
-        categoryKey: rule.categoryKey,
-        categoryLabel: rule.categoryLabel,
-        percentage: Number(rule.percentage),
-      })),
+    rules: activeRules,
+    ipadPercentage: highestPercentageFor("ipad"),
+    macPercentage: highestPercentageFor("mac"),
+    accessoriesPercentage: highestPercentageFor("accessories"),
+    iphonePercentage: highestPercentageFor("iphone"),
+    appleWatchPercentage: highestPercentageFor("apple-watch"),
+    tvHomePercentage: highestPercentageFor("tv-home"),
+    airpodsPercentage: highestPercentageFor("airpods"),
   };
 }
 
@@ -63,35 +78,38 @@ async function runAdminGraphql(admin, query, variables) {
   return payload?.data ?? null;
 }
 
+function normalizeFunctionTitle(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 async function getDiscountFunctionId(admin) {
   const data = await runAdminGraphql(
     admin,
     `#graphql
-      query GetAppDiscountTypes {
-        appDiscountTypes(first: 50) {
+      query GetShopifyFunctions {
+        shopifyFunctions(first: 50) {
           nodes {
+            id
             title
-            functionId
-            discountClasses
+            apiType
           }
         }
       }
     `,
   );
 
-  const nodes = data?.appDiscountTypes?.nodes ?? [];
+  const nodes = data?.shopifyFunctions?.nodes ?? [];
   const match = nodes.find(
     (node) =>
-      node?.title === DISCOUNT_FUNCTION_TITLE &&
-      Array.isArray(node.discountClasses) &&
-      node.discountClasses.includes("PRODUCT"),
+      normalizeFunctionTitle(node?.title) === normalizeFunctionTitle(DISCOUNT_FUNCTION_TITLE) &&
+      String(node?.apiType || "").trim().toLowerCase() === DISCOUNT_API_TYPE,
   );
 
-  if (!match?.functionId) {
+  if (!match?.id) {
     throw new Error(`Unable to locate Shopify discount function "${DISCOUNT_FUNCTION_TITLE}".`);
   }
 
-  return match.functionId;
+  return match.id;
 }
 
 async function createAutomaticDiscount(admin, functionId, configValue) {
@@ -221,4 +239,15 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
     functionId,
     ruleCount: config.rules.length,
   };
+}
+
+export function syncErrorMessage(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/function not found/i.test(message)) {
+    return "Shopify discount function is not registered on the shop yet. Deploy the Shopify app again, then retry.";
+  }
+  if (/unable to locate shopify discount function/i.test(message)) {
+    return "Shopify discount function was not found for this app on the shop yet. Deploy the Shopify app again, then retry.";
+  }
+  return message;
 }
