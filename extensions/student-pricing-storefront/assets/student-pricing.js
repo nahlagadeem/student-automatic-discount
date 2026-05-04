@@ -28,6 +28,19 @@
     return document.querySelector(CONFIG_SELECTOR);
   }
 
+  function getShopDomain(config) {
+    const dataShop = String((config && config.dataset && config.dataset.shop) || "").trim();
+    if (dataShop) return dataShop;
+
+    const globalShop =
+      window.Shopify &&
+      typeof window.Shopify.shop === "string"
+        ? String(window.Shopify.shop).trim()
+        : "";
+
+    return globalShop;
+  }
+
   function extractHandleFromPath(pathname) {
     const match = String(pathname || "").match(/\/products\/([^/?#]+)/i);
     return match ? decodeURIComponent(match[1]).trim().toLowerCase() : "";
@@ -146,7 +159,7 @@
   async function fetchPricing(config, handles) {
     const endpoint = config.dataset.endpoint || "/apps/student-automatic-discount/proxy/student-pricing";
     const url = new URL(endpoint, window.location.origin);
-    url.searchParams.set("shop", config.dataset.shop || "");
+    url.searchParams.set("shop", getShopDomain(config));
     url.searchParams.set("logged_in_customer_id", config.dataset.customerId || "");
     url.searchParams.set("handles", handles.join(","));
 
