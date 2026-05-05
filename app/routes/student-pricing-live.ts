@@ -1,6 +1,6 @@
 import prisma from "../db.server";
 import { ensureAutomaticDiscountRuleTable } from "../automatic-discount-rules.server";
-import { CATEGORY_COLLECTION_IDS } from "../institutes";
+import { CATEGORY_COLLECTION_IDS, getInstituteByEmail, getInstituteByLabel } from "../institutes";
 import { authenticate, unauthenticated } from "../shopify.server";
 
 const JSON_HEADERS = {
@@ -20,6 +20,14 @@ type ProductNode = {
   title?: string | null;
   collections?: {
     nodes?: { id?: string | null }[];
+  } | null;
+};
+
+type CustomerNode = {
+  id?: string | null;
+  email?: string | null;
+  metafield?: {
+    value?: string | null;
   } | null;
 };
 
@@ -51,6 +59,10 @@ function normalizeShopDomain(input: string | null | undefined): string {
 }
 
 function normalizeHandle(input: string): string {
+  return String(input || "").trim().toLowerCase();
+}
+
+function normalizeEmail(input: string | null | undefined): string {
   return String(input || "").trim().toLowerCase();
 }
 
@@ -127,13 +139,14 @@ async function resolveAdminClient(shop: string): Promise<{ admin: GraphqlClient;
   }
 }
 
-async function getCustomerInstituteKey(admin: GraphqlClient, customerId: string) {
+async function fetchCustomerIdentity(admin: GraphqlClient, customerId: string): Promise<CustomerNode | null> {
   const data = await runAdminGraphql(
     admin,
     `#graphql
       query GetCustomerInstitute($id: ID!) {
         customer(id: $id) {
           id
+          email
           metafield(namespace: "$app:student-discount", key: "institute_key") {
             value
           }
@@ -143,7 +156,81 @@ async function getCustomerInstituteKey(admin: GraphqlClient, customerId: string)
     { id: customerId },
   );
 
-  return String(data?.customer?.metafield?.value || "").trim();
+  return (data?.customer as CustomerNode | null) ?? null;
+}
+
+async function setCustomerInstituteMetafield(admin: GraphqlClient, customerId: string, instituteKey: string) {
+  const data = await runAdminGraphql(
+    admin,
+    `#graphql
+      mutation SetCustomerInstituteMetafield($metafields: [MetafieldsSetInput!]!) {
+        metafieldsSet(metafields: $metafields) {
+          userErrors {
+            message
+          }
+        }
+      }
+    `,
+    {
+      metafields: [
+        {
+          ownerId: customerId,
+          namespace: "$app:student-discount",
+          key: "institute_key",
+          type: "single_line_text_field",
+          value: instituteKey,
+        },
+      ],
+    },
+  );
+
+  const userErrors = data?.metafieldsSet?.userErrors ?? [];
+  if (userErrors.length) {
+    throw new Error(userErrors.map((error: { message?: string }) => error.message).join("; "));
+  }
+}
+
+async function getCustomerInstituteKey(admin: GraphqlClient, customerId: string) {
+  const customer = await fetchCustomerIdentity(admin, customerId);
+  const metafieldValue = String(customer?.metafield?.value || "").trim();
+  if (metafieldValue) {
+    return metafieldValue;
+  }
+
+  const customerEmail = normalizeEmail(customer?.email);
+  if (!customerEmail) {
+    return "";
+  }
+
+  const portalUser = await prisma.portalUser.findFirst({
+    where: {
+      OR: [{ email: customerEmail }, { schoolEmail: customerEmail }],
+    },
+    select: {
+      email: true,
+      schoolEmail: true,
+      institute: true,
+    },
+  });
+
+  const instituteKey =
+    getInstituteByLabel(portalUser?.institute || "")?.key ||
+    getInstituteByEmail(portalUser?.schoolEmail || "")?.key ||
+    getInstituteByEmail(portalUser?.email || "")?.key ||
+    getInstituteByEmail(customerEmail)?.key ||
+    "";
+
+  if (!instituteKey || !customer?.id) {
+    return "";
+  }
+
+  try {
+    await setCustomerInstituteMetafield(admin, customer.id, instituteKey);
+  } catch (error: unknown) {
+    console.warn("[student-pricing-live] failed to persist customer institute metafield:", errorMessage(error));
+  }
+
+  return instituteKey;
 }
 
 function buildCustomerGid(rawCustomerId: string | null) {
