@@ -116,7 +116,7 @@
     return current;
   }
 
-  function buildPreview(priceElement, discountedText, percentage) {
+  function buildPreview(priceElement, discountedText) {
     const existing = priceElement.parentElement && priceElement.parentElement.querySelector(".student-pricing-preview");
     if (existing) existing.remove();
 
@@ -127,8 +127,7 @@
     }
     preview.innerHTML =
       `<span class="student-pricing-preview__label">Institute price</span>` +
-      `<span class="student-pricing-preview__price">${discountedText}</span>` +
-      `<span class="student-pricing-preview__label">${percentage}% off</span>`;
+      `<span class="student-pricing-preview__price">${discountedText}</span>`;
 
     priceElement.classList.add("student-pricing-original");
     priceElement.insertAdjacentElement("afterend", preview);
@@ -235,7 +234,7 @@
           if (!parsedMoney || parsedMoney.amount <= 0) continue;
 
           const discountedAmount = parsedMoney.amount * (1 - percentage / 100);
-          buildPreview(priceElement, formatMoney(parsedMoney, discountedAmount), percentage);
+          buildPreview(priceElement, formatMoney(parsedMoney, discountedAmount));
         }
       }
     } finally {
