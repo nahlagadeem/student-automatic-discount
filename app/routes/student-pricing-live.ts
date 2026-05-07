@@ -1,6 +1,7 @@
 import prisma from "../db.server";
 import { ensureAutomaticDiscountRuleTable } from "../automatic-discount-rules.server";
 import { CATEGORY_COLLECTION_IDS, getInstituteByEmail, getInstituteByLabel } from "../institutes";
+import { linkPortalUserToCustomer } from "../portal-user-links.server";
 import { authenticate, unauthenticated } from "../shopify.server";
 
 const JSON_HEADERS = {
@@ -190,7 +191,7 @@ async function setCustomerInstituteMetafield(admin: GraphqlClient, customerId: s
   }
 }
 
-async function getCustomerInstituteKey(admin: GraphqlClient, customerId: string) {
+async function getCustomerInstituteKey(admin: GraphqlClient, shop: string, customerId: string) {
   const customer = await fetchCustomerIdentity(admin, customerId);
   const metafieldValue = String(customer?.metafield?.value || "").trim();
   if (metafieldValue) {
@@ -207,6 +208,7 @@ async function getCustomerInstituteKey(admin: GraphqlClient, customerId: string)
       OR: [{ email: customerEmail }, { schoolEmail: customerEmail }],
     },
     select: {
+      id: true,
       email: true,
       schoolEmail: true,
       institute: true,
@@ -222,6 +224,18 @@ async function getCustomerInstituteKey(admin: GraphqlClient, customerId: string)
 
   if (!instituteKey || !customer?.id) {
     return "";
+  }
+
+  if (portalUser?.id) {
+    try {
+      await linkPortalUserToCustomer({
+        shop,
+        portalUserId: portalUser.id,
+        customerGid: customer.id,
+      });
+    } catch (error: unknown) {
+      console.warn("[student-pricing-live] failed to store portal user customer link:", errorMessage(error));
+    }
   }
 
   try {
@@ -350,7 +364,7 @@ async function handle(request: Request) {
   }
 
   try {
-    const instituteKey = await getCustomerInstituteKey(admin, customerGid);
+    const instituteKey = await getCustomerInstituteKey(admin, shop, customerGid);
     if (!instituteKey) {
       return json({
         ok: true,

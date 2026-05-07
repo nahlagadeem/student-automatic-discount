@@ -45,6 +45,21 @@ model PortalUser {
   passwordHash String
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  customerLinks PortalUserCustomerLink[]
+}
+
+model PortalUserCustomerLink {
+  id           Int        @id @default(autoincrement())
+  shop         String
+  customerId   String
+  customerGid  String?
+  portalUserId Int
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  portalUser   PortalUser @relation(fields: [portalUserId], references: [id], onDelete: Cascade)
+
+  @@unique([shop, customerId])
+  @@unique([shop, customerGid])
 }
 
 model StudentDiscount {

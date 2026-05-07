@@ -1,5 +1,6 @@
 import prisma from "./db.server";
 import { getInstituteByLabel } from "./institutes";
+import { linkPortalUserToCustomer } from "./portal-user-links.server";
 
 const DISCOUNT_TITLE = "Combined Institute Discount";
 const DISCOUNT_FUNCTION_TITLE = "Combined Institute Discount";
@@ -282,7 +283,7 @@ async function setCustomerInstituteMetafield(admin, customerId, instituteKey) {
   }
 }
 
-export async function syncPortalUsersToCustomerTags({ admin, rules }) {
+export async function syncPortalUsersToCustomerTags({ admin, shop, rules }) {
   const activeInstituteLabels = Array.from(
     new Set(
       rules
@@ -322,6 +323,11 @@ export async function syncPortalUsersToCustomerTags({ admin, rules }) {
       const customerIds = await findCustomerIdsByEmail(admin, email);
       for (const customerId of customerIds) {
         customerAssignments.set(customerId, institute.key);
+        await linkPortalUserToCustomer({
+          shop,
+          portalUserId: user.id,
+          customerGid: customerId,
+        });
       }
     }
   }
