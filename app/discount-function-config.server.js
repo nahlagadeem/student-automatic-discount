@@ -2,8 +2,8 @@ import prisma from "./db.server";
 import { getInstituteByLabel } from "./institutes";
 import { linkPortalUserToCustomer } from "./portal-user-links.server";
 
-const DISCOUNT_TITLE = "Combined Institute Discount";
-const DISCOUNT_FUNCTION_TITLE = "Combined Institute Discount";
+const DISCOUNT_TITLE = "Discounted price";
+const DISCOUNT_FUNCTION_TITLE = "Discounted price";
 const CONFIG_NAMESPACE = "$app:category-tier-discount-native";
 const CONFIG_KEY = "function-configuration";
 const DISCOUNT_API_TYPE = "discount";
