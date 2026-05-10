@@ -174,7 +174,6 @@ export function cartLinesDiscountsGenerateRun(
 
   const candidates = Object.entries(productLinesByPercent).map(
     ([percentage, lines]) => ({
-      message: `${percentage}% category discount`,
       targets: lines.map((line) => ({
         cartLine: {
           id: line.id,
