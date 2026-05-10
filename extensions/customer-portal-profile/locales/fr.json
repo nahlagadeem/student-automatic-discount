@@ -1,4 +1,13 @@
 {
-  "name": "customer-portal-profile",
-  "welcome": "Bienvenue dans l'extension {{target}}!"
+  "name": "Profil portail",
+  "blockHeading": "Profil portail",
+  "fullName": "Nom complet",
+  "institute": "Institut",
+  "domain": "Domaine e-mail",
+  "role": "Role",
+  "phone": "Numero de telephone",
+  "notAvailable": "Non disponible",
+  "emptyHeading": "Aucun profil portail synchronise",
+  "emptyBody": "Ouvrez l'application et lancez la synchronisation pour ce client si le profil portail doit exister. Client : {{customerId}}",
+  "loadError": "Echec du chargement du profil portail : {{message}}"
 }
