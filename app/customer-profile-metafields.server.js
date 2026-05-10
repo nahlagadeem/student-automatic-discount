@@ -96,10 +96,15 @@ export function buildCustomerPortalProfileMetafields(customerId, portalUser) {
       type: "single_line_text_field",
       value: profile.phoneNumber,
     },
-  ];
+  ].filter((metafield) => String(metafield?.value || "").trim());
 }
 
 export async function setCustomerPortalProfileMetafields(admin, customerId, portalUser) {
+  const metafields = buildCustomerPortalProfileMetafields(customerId, portalUser);
+  if (!metafields.length) {
+    return normalizePortalCustomerProfile(portalUser);
+  }
+
   const response = await admin.graphql(
     `#graphql
       mutation SetCustomerPortalProfileMetafields($metafields: [MetafieldsSetInput!]!) {
@@ -112,7 +117,7 @@ export async function setCustomerPortalProfileMetafields(admin, customerId, port
     `,
     {
       variables: {
-        metafields: buildCustomerPortalProfileMetafields(customerId, portalUser),
+        metafields,
       },
     },
   );
