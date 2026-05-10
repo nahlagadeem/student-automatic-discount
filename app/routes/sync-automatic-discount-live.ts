@@ -1,5 +1,10 @@
 import prisma from "../db.server";
-import { ensureAutomaticDiscountConfigTable, syncAutomaticDiscountRules, syncErrorMessage } from "../discount-function-config.server";
+import {
+  ensureAutomaticDiscountConfigTable,
+  syncAutomaticDiscountRules,
+  syncErrorMessage,
+  syncPortalUsersToCustomerTags,
+} from "../discount-function-config.server";
 import { ensureAutomaticDiscountRuleTable } from "../automatic-discount-rules.server";
 import { unauthenticated } from "../shopify.server";
 
@@ -52,8 +57,9 @@ async function handle(request: Request) {
 
     const { admin } = await unauthenticated.admin(shop);
     const syncResult = await syncAutomaticDiscountRules({ admin, shop, rules });
+    const portalSyncResult = await syncPortalUsersToCustomerTags({ admin, shop, rules });
 
-    return json({ ok: true, shop, syncResult });
+    return json({ ok: true, shop, syncResult, portalSyncResult });
   } catch (error) {
     return json(
       {

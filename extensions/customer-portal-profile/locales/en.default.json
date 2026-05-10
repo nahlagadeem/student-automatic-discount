@@ -1,0 +1,13 @@
+{
+  "name": "Portal Profile",
+  "blockHeading": "Portal Profile",
+  "fullName": "Full name",
+  "institute": "Institute",
+  "domain": "Email domain",
+  "role": "Role",
+  "phone": "Phone number",
+  "notAvailable": "Not available",
+  "emptyHeading": "No portal profile synced",
+  "emptyBody": "Open the app and run the sync flow for this customer if the portal profile should exist. Customer: {{customerId}}",
+  "loadError": "Failed to load portal profile: {{message}}"
+}

@@ -1,6 +1,7 @@
 import prisma from "./db.server";
 import { getInstituteByLabel } from "./institutes";
 import { linkPortalUserToCustomer } from "./portal-user-links.server";
+import { setCustomerPortalProfileMetafields } from "./customer-profile-metafields.server";
 
 const DISCOUNT_TITLE = "Discounted price";
 const DISCOUNT_FUNCTION_TITLE = "Discounted price";
@@ -301,13 +302,17 @@ export async function syncPortalUsersToCustomerTags({ admin, shop, rules }) {
     where: {
       institute: { in: activeInstituteLabels },
     },
-    select: {
-      id: true,
-      email: true,
-      schoolEmail: true,
-      institute: true,
-    },
-  });
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        schoolEmail: true,
+        institute: true,
+        role: true,
+        roleOther: true,
+        phoneSa: true,
+      },
+    });
 
   const customerAssignments = new Map();
 
@@ -322,7 +327,7 @@ export async function syncPortalUsersToCustomerTags({ admin, shop, rules }) {
     for (const email of emails) {
       const customerIds = await findCustomerIdsByEmail(admin, email);
       for (const customerId of customerIds) {
-        customerAssignments.set(customerId, institute.key);
+        customerAssignments.set(customerId, { instituteKey: institute.key, portalUser: user });
         await linkPortalUserToCustomer({
           shop,
           portalUserId: user.id,
@@ -332,8 +337,10 @@ export async function syncPortalUsersToCustomerTags({ admin, shop, rules }) {
     }
   }
 
-  for (const [customerId, instituteKey] of customerAssignments.entries()) {
+  for (const [customerId, assignment] of customerAssignments.entries()) {
+    const { instituteKey, portalUser } = assignment;
     await setCustomerInstituteMetafield(admin, customerId, instituteKey);
+    await setCustomerPortalProfileMetafields(admin, customerId, portalUser);
   }
 
   return {

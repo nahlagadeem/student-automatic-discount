@@ -1,6 +1,7 @@
 import prisma from "../db.server";
 import { ensureAutomaticDiscountRuleTable } from "../automatic-discount-rules.server";
 import { CATEGORY_COLLECTION_IDS, getInstituteByEmail, getInstituteByLabel } from "../institutes";
+import { setCustomerPortalProfileMetafields } from "../customer-profile-metafields.server";
 import { linkPortalUserToCustomer } from "../portal-user-links.server";
 import { authenticate, unauthenticated } from "../shopify.server";
 
@@ -209,9 +210,13 @@ async function getCustomerInstituteKey(admin: GraphqlClient, shop: string, custo
     },
     select: {
       id: true,
+      fullName: true,
       email: true,
       schoolEmail: true,
       institute: true,
+      role: true,
+      roleOther: true,
+      phoneSa: true,
     },
   });
 
@@ -242,6 +247,14 @@ async function getCustomerInstituteKey(admin: GraphqlClient, shop: string, custo
     await setCustomerInstituteMetafield(admin, customer.id, instituteKey);
   } catch (error: unknown) {
     console.warn("[student-pricing-live] failed to persist customer institute metafield:", errorMessage(error));
+  }
+
+  if (portalUser?.id) {
+    try {
+      await setCustomerPortalProfileMetafields(admin, customer.id, portalUser);
+    } catch (error: unknown) {
+      console.warn("[student-pricing-live] failed to persist customer portal profile metafields:", errorMessage(error));
+    }
   }
 
   return instituteKey;

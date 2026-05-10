@@ -38,3 +38,33 @@ redirect_urls = [
 url = "https://student-automatic-discount.onrender.com"
 subpath = "student-automatic-discount"
 prefix = "apps"
+
+[customer.metafields.app.portal_full_name]
+name = "Portal Full Name"
+description = "Full name from the student portal record"
+type = "single_line_text_field"
+access.admin = "merchant_read"
+
+[customer.metafields.app.portal_institute_name]
+name = "Portal Institute"
+description = "Institute name from the student portal record"
+type = "single_line_text_field"
+access.admin = "merchant_read"
+
+[customer.metafields.app.portal_email_domain]
+name = "Portal Email Domain"
+description = "Institute email domain from the student portal record"
+type = "single_line_text_field"
+access.admin = "merchant_read"
+
+[customer.metafields.app.portal_role]
+name = "Portal Role"
+description = "Role from the student portal record"
+type = "single_line_text_field"
+access.admin = "merchant_read"
+
+[customer.metafields.app.portal_phone_number]
+name = "Portal Phone Number"
+description = "Phone number from the student portal record"
+type = "single_line_text_field"
+access.admin = "merchant_read"

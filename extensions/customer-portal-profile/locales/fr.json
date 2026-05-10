@@ -1,0 +1,4 @@
+{
+  "name": "customer-portal-profile",
+  "welcome": "Bienvenue dans l'extension {{target}}!"
+}
