@@ -14,14 +14,19 @@ async function getCustomerPortalProfile(customerId) {
       query CustomerPortalProfile($id: ID!) {
         customer(id: $id) {
           id
-          metafields(identifiers: [
-            {namespace: "$app", key: "portal_full_name"},
-            {namespace: "$app", key: "portal_institute_name"},
-            {namespace: "$app", key: "portal_email_domain"},
-            {namespace: "$app", key: "portal_role"},
-            {namespace: "$app", key: "portal_phone_number"}
-          ]) {
-            key
+          fullName: metafield(namespace: "$app", key: "portal_full_name") {
+            value
+          }
+          instituteName: metafield(namespace: "$app", key: "portal_institute_name") {
+            value
+          }
+          emailDomain: metafield(namespace: "$app", key: "portal_email_domain") {
+            value
+          }
+          role: metafield(namespace: "$app", key: "portal_role") {
+            value
+          }
+          phoneNumber: metafield(namespace: "$app", key: "portal_phone_number") {
             value
           }
         }
@@ -30,24 +35,18 @@ async function getCustomerPortalProfile(customerId) {
     {variables: {id: customerId}},
   );
 
-  const metafields = Array.isArray(result?.data?.customer?.metafields)
-    ? result.data.customer.metafields
-    : [];
-
-  const valueFor = (key) =>
-    String(
-      metafields.find((metafield) => String(metafield?.key || "").trim() === key)?.value || "",
-    ).trim();
+  const customer = result?.data?.customer || null;
+  const valueFor = (fieldName) => String(customer?.[fieldName]?.value || "").trim();
 
   return {
     customerId,
     errors: Array.isArray(result?.errors) ? result.errors : [],
     profile: {
-      fullName: valueFor("portal_full_name"),
-      instituteName: valueFor("portal_institute_name"),
-      emailDomain: valueFor("portal_email_domain"),
-      role: valueFor("portal_role"),
-      phoneNumber: valueFor("portal_phone_number"),
+      fullName: valueFor("fullName"),
+      instituteName: valueFor("instituteName"),
+      emailDomain: valueFor("emailDomain"),
+      role: valueFor("role"),
+      phoneNumber: valueFor("phoneNumber"),
     },
   };
 }
