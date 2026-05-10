@@ -6,6 +6,7 @@
   "domain": "Domaine e-mail",
   "role": "Role",
   "phone": "Numero de telephone",
+  "loading": "Chargement du profil portail...",
   "notAvailable": "Non disponible",
   "emptyHeading": "Aucun profil portail synchronise",
   "emptyBody": "Ouvrez l'application et lancez la synchronisation pour ce client si le profil portail doit exister. Client : {{customerId}}",

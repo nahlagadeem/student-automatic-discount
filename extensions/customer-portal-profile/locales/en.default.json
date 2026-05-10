@@ -6,6 +6,7 @@
   "domain": "Email domain",
   "role": "Role",
   "phone": "Phone number",
+  "loading": "Loading portal profile...",
   "notAvailable": "Not available",
   "emptyHeading": "No portal profile synced",
   "emptyBody": "Open the app and run the sync flow for this customer if the portal profile should exist. Customer: {{customerId}}",
