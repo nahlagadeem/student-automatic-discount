@@ -126,7 +126,7 @@
       preview.classList.add("is-inline");
     }
     preview.innerHTML =
-      `<span class="student-pricing-preview__label">Institute price</span>` +
+      `<span class="student-pricing-preview__label">Discounted price</span>` +
       `<span class="student-pricing-preview__price">${discountedText}</span>`;
 
     priceElement.classList.add("student-pricing-original");
