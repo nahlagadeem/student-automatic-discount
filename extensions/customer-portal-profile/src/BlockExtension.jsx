@@ -18,7 +18,9 @@ function emptyProfile() {
   };
 }
 
-render(<Extension />, document.body);
+export default function BlockExtension() {
+  render(<Extension />, document.body);
+}
 
 async function getCustomerPortalProfile(customerId) {
   const result = await shopify.query(
