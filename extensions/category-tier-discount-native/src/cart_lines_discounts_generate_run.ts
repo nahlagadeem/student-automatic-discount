@@ -38,9 +38,9 @@ type ProductLineProduct = Extract<
 >["product"];
 
 const DEFAULT_CONFIG: TierConfig = {
-  ipadPercentage: 8,
-  macPercentage: 13,
-  accessoriesPercentage: 5,
+  ipadPercentage: 0,
+  macPercentage: 0,
+  accessoriesPercentage: 0,
   iphonePercentage: 0,
   appleWatchPercentage: 0,
   tvHomePercentage: 0,
