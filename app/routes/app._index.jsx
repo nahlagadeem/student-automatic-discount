@@ -100,8 +100,8 @@ export const action = async ({ request }) => {
       orderBy: [{ instituteLabel: "asc" }, { categoryLabel: "asc" }],
     });
     try {
-      const syncResult = await syncAutomaticDiscountRules({ admin, shop: session.shop, rules });
       const portalSyncResult = await syncPortalUsersToCustomerTags({ admin, shop: session.shop, rules });
+      const syncResult = await syncAutomaticDiscountRules({ admin, shop: session.shop, rules });
       return { ok: true, deleted: true, syncResult, portalSyncResult };
     } catch (error) {
       return {
@@ -159,8 +159,8 @@ export const action = async ({ request }) => {
     orderBy: [{ instituteLabel: "asc" }, { categoryLabel: "asc" }],
   });
   try {
-    const syncResult = await syncAutomaticDiscountRules({ admin, shop: session.shop, rules });
     const portalSyncResult = await syncPortalUsersToCustomerTags({ admin, shop: session.shop, rules });
+    const syncResult = await syncAutomaticDiscountRules({ admin, shop: session.shop, rules });
 
     return {
       ok: true,

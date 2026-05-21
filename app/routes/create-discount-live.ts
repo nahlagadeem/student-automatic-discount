@@ -10,6 +10,7 @@ import {
   resolveAdminClient,
   upsertStudentDiscount,
 } from "../student-discount.server";
+import { buildCustomerGid } from "../portal-user-links.server";
 import { authenticate } from "../shopify.server";
 
 function buildCustomerId(url: URL) {
@@ -58,61 +59,68 @@ async function handle(request: Request) {
 
   await ensureStudentDiscountTable();
 
-  if (customerId) {
-    const existing = await findStudentDiscount(shop, customerId);
-    if (existing) {
-      const storedCode = String(existing.code || "").trim();
-      const storedDiscountNodeId = String(existing.shopifyDiscountId || existing.discountNodeId || "").trim();
-      const liveDiscountNodeId = storedCode ? await findDiscountNodeIdByCode(admin, storedCode) : "";
+  if (!customerId) {
+    return json(
+      {
+        ok: false,
+        error: "Missing customer id for discount eligibility. The discount can no longer be created for all customers.",
+      },
+      { status: 400 },
+    );
+  }
 
-      if (liveDiscountNodeId) {
-        if (liveDiscountNodeId !== storedDiscountNodeId) {
-          await upsertStudentDiscount({
-            shop,
-            customerId,
-            code: storedCode,
-            discountNodeId: liveDiscountNodeId,
-          });
-        }
+  const existing = await findStudentDiscount(shop, customerId);
+  if (existing) {
+    const storedCode = String(existing.code || "").trim();
+    const storedDiscountNodeId = String(existing.shopifyDiscountId || existing.discountNodeId || "").trim();
+    const liveDiscountNodeId = storedCode ? await findDiscountNodeIdByCode(admin, storedCode) : "";
 
-        return json({
-          ok: true,
-          reused: true,
-          code: storedCode,
-          discountNodeId: liveDiscountNodeId || storedDiscountNodeId,
+    if (liveDiscountNodeId) {
+      if (liveDiscountNodeId !== storedDiscountNodeId) {
+        await upsertStudentDiscount({
+          shop,
           customerId,
-          via,
-          proxyVerified,
+          code: storedCode,
+          discountNodeId: liveDiscountNodeId,
         });
       }
 
-      console.warn("[create-discount-live] stale local discount row found; Shopify code was already deleted manually", {
-        shop,
-        customerId,
+      return json({
+        ok: true,
+        reused: true,
         code: storedCode,
-        discountNodeId: storedDiscountNodeId || null,
-      });
-
-      await deleteStudentDiscountRow({
-        shop,
+        discountNodeId: liveDiscountNodeId || storedDiscountNodeId,
         customerId,
+        via,
+        proxyVerified,
       });
     }
+
+    console.warn("[create-discount-live] stale local discount row found; Shopify code was already deleted manually", {
+      shop,
+      customerId,
+      code: storedCode,
+      discountNodeId: storedDiscountNodeId || null,
+    });
+
+    await deleteStudentDiscountRow({
+      shop,
+      customerId,
+    });
   }
 
   const code = `STUDENT-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 
   try {
-    const created = await createShopifyCodeDiscount(admin, code);
+    const customerGid = buildCustomerGid(customerId);
+    const created = await createShopifyCodeDiscount(admin, code, [customerGid]);
 
-    if (customerId) {
-      await upsertStudentDiscount({
-        shop,
-        customerId,
-        code: created.code,
-        discountNodeId: created.discountNodeId,
-      });
-    }
+    await upsertStudentDiscount({
+      shop,
+      customerId,
+      code: created.code,
+      discountNodeId: created.discountNodeId,
+    });
 
     return json({
       ok: true,

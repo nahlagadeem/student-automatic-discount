@@ -1,5 +1,6 @@
 import prisma from "./db.server";
 import { unauthenticated } from "./shopify.server";
+import { buildCustomerGid } from "./portal-user-links.server";
 
 const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
@@ -215,7 +216,15 @@ export async function findDiscountNodeIdByCode(admin, code) {
   return nodeId;
 }
 
-export async function createShopifyCodeDiscount(admin, code) {
+export async function createShopifyCodeDiscount(admin, code, customerIds = []) {
+  const eligibleCustomerIds = Array.from(
+    new Set(customerIds.map((value) => buildCustomerGid(value)).filter(Boolean)),
+  );
+
+  if (!eligibleCustomerIds.length) {
+    throw new Error("No eligible customer IDs were provided for the discount.");
+  }
+
   const result = await admin.graphql(
     `
       mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
@@ -231,7 +240,12 @@ export async function createShopifyCodeDiscount(admin, code) {
           title: `Institute Discount ${code}`,
           code,
           startsAt: new Date().toISOString(),
-          customerSelection: { all: true },
+          context: {
+            customers: {
+              add: eligibleCustomerIds,
+            },
+          },
+          appliesOncePerCustomer: true,
           customerGets: {
             value: { percentage: 0.5 },
             items: { all: true },

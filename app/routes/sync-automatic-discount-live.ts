@@ -56,8 +56,8 @@ async function handle(request: Request) {
     });
 
     const { admin } = await unauthenticated.admin(shop);
-    const syncResult = await syncAutomaticDiscountRules({ admin, shop, rules });
     const portalSyncResult = await syncPortalUsersToCustomerTags({ admin, shop, rules });
+    const syncResult = await syncAutomaticDiscountRules({ admin, shop, rules });
 
     return json({ ok: true, shop, syncResult, portalSyncResult });
   } catch (error) {
