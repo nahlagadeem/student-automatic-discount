@@ -223,6 +223,34 @@ async function createAutomaticDiscount(admin, functionId, configValue) {
   return discountNodeId;
 }
 
+async function deleteAutomaticDiscount(admin, discountNodeId) {
+  if (!discountNodeId) return;
+
+  const data = await runAdminGraphql(
+    admin,
+    `#graphql
+      mutation DeleteAutomaticDiscount($id: ID!) {
+        discountAutomaticDelete(id: $id) {
+          deletedDiscountId
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `,
+    {
+      id: discountNodeId,
+    },
+  );
+
+  const payload = data?.discountAutomaticDelete;
+  const userErrors = payload?.userErrors ?? [];
+  if (userErrors.length) {
+    throw new Error(userErrors.map((error) => error.message).join("; "));
+  }
+}
+
 async function findCustomerIdsByEmail(admin, email) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) return [];
@@ -349,46 +377,6 @@ export async function syncPortalUsersToCustomerTags({ admin, shop, rules }) {
   };
 }
 
-async function updateAutomaticDiscount(admin, discountNodeId, configValue) {
-  const data = await runAdminGraphql(
-    admin,
-    `#graphql
-      mutation UpdateAutomaticDiscount($id: ID!, $automaticAppDiscount: DiscountAutomaticAppInput!) {
-        discountAutomaticAppUpdate(id: $id, automaticAppDiscount: $automaticAppDiscount) {
-          automaticAppDiscount {
-            discountId
-          }
-          userErrors {
-            field
-            message
-          }
-        }
-      }
-    `,
-    {
-      id: discountNodeId,
-      automaticAppDiscount: {
-        title: DISCOUNT_TITLE,
-        metafields: [
-          {
-            namespace: CONFIG_NAMESPACE,
-            key: CONFIG_KEY,
-            type: "json",
-            value: configValue,
-          },
-        ],
-      },
-    },
-  );
-
-  const payload = data?.discountAutomaticAppUpdate;
-  if (payload?.userErrors?.length) {
-    throw new Error(payload.userErrors.map((error) => error.message).join("; "));
-  }
-
-  return payload?.automaticAppDiscount?.discountId ?? discountNodeId;
-}
-
 export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
   await ensureAutomaticDiscountConfigTable();
 
@@ -401,10 +389,42 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
   const functionId = existingConfig?.functionId || (await getDiscountFunctionId(admin));
   let discountNodeId = existingConfig?.discountNodeId || "";
 
+  if (!config.rules.length) {
+    if (discountNodeId) {
+      try {
+        await deleteAutomaticDiscount(admin, discountNodeId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/not found|invalid id|does not exist/i.test(message)) {
+          throw error;
+        }
+      }
+    }
+
+    await prisma.automaticDiscountConfig.deleteMany({
+      where: { shop },
+    });
+
+    return {
+      discountNodeId: "",
+      functionId,
+      ruleCount: 0,
+    };
+  }
+
   try {
-    discountNodeId = discountNodeId
-      ? await updateAutomaticDiscount(admin, discountNodeId, configValue)
-      : await createAutomaticDiscount(admin, functionId, configValue);
+    if (discountNodeId) {
+      try {
+        await deleteAutomaticDiscount(admin, discountNodeId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/not found|invalid id|does not exist/i.test(message)) {
+          throw error;
+        }
+      }
+    }
+
+    discountNodeId = await createAutomaticDiscount(admin, functionId, configValue);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!discountNodeId || !/not found|invalid id|does not exist/i.test(message)) {
