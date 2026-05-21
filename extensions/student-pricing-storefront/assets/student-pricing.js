@@ -220,11 +220,49 @@
     return response.json();
   }
 
+  async function fetchCleanupStatus(config) {
+    const endpoint = config.dataset.endpoint || "/apps/student-automatic-discount/proxy/student-pricing";
+    const url = new URL(endpoint, window.location.origin);
+    url.searchParams.set("shop", getShopDomain(config));
+    url.searchParams.set("logged_in_customer_id", config.dataset.customerId || "");
+    url.searchParams.set("cleanup", "1");
+
+    const response = await fetch(url.toString(), {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" }
+    });
+
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => "");
+      const summary = bodyText.length > 240 ? `${bodyText.slice(0, 240)}...` : bodyText;
+      throw new Error(`Student pricing cleanup request failed with ${response.status}: ${summary}`);
+    }
+
+    return response.json();
+  }
+
   async function applyStudentPricing() {
     const currentToken = ++requestToken;
     const config = getConfig();
     if (!(config instanceof HTMLElement)) return;
     if (!config.dataset.customerId) return;
+
+    let cleanupPayload = null;
+    try {
+      cleanupPayload = await fetchCleanupStatus(config);
+    } catch (error) {
+      console.warn("[student-pricing] failed to fetch cleanup status", error);
+    }
+
+    if (currentToken !== requestToken) return;
+
+    if (cleanupPayload && cleanupPayload.ok && cleanupPayload.shouldClearCartDiscount) {
+      try {
+        await clearCartDiscounts();
+      } catch (error) {
+        console.warn("[student-pricing] failed to clear cart discounts", error);
+      }
+    }
 
     const targets = collectTargets();
     if (!targets.length) return;

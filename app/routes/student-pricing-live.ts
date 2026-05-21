@@ -332,6 +332,8 @@ async function handle(request: Request) {
   const liveShop = normalizeShopDomain(env.LIVE_SHOP_DOMAIN);
   const requestedShop = normalizeShopDomain(url.searchParams.get("shop"));
   const shop = requestedShop || liveShop;
+  const cleanupMode =
+    url.searchParams.get("cleanup") === "1" || url.searchParams.get("intent") === "cleanup";
 
   let proxyVerified = false;
   try {
@@ -352,12 +354,23 @@ async function handle(request: Request) {
     .map(normalizeHandle)
     .filter(Boolean);
 
-  if (!handles.length) {
+  if (!handles.length && !cleanupMode) {
     return json({ ok: true, byHandle: {}, eligible: false, reason: "no_handles", proxyVerified });
   }
 
   const customerGid = buildCustomerGid(url.searchParams.get("logged_in_customer_id"));
   if (!customerGid) {
+    if (cleanupMode) {
+      return json({
+        ok: true,
+        shouldClearCartDiscount: true,
+        byHandle: {},
+        eligible: false,
+        reason: "no_customer",
+        proxyVerified,
+      });
+    }
+
     return json({ ok: true, byHandle: {}, eligible: false, reason: "no_customer", proxyVerified });
   }
 
@@ -379,6 +392,18 @@ async function handle(request: Request) {
   try {
     const instituteKey = await getCustomerInstituteKey(admin, shop, customerGid);
     if (!instituteKey) {
+      if (cleanupMode) {
+        return json({
+          ok: true,
+          shouldClearCartDiscount: true,
+          byHandle: {},
+          eligible: false,
+          reason: "no_institute",
+          proxyVerified,
+          via,
+        });
+      }
+
       return json({
         ok: true,
         byHandle: {},
@@ -403,6 +428,19 @@ async function handle(request: Request) {
     });
 
     if (!rules.length) {
+      if (cleanupMode) {
+        return json({
+          ok: true,
+          shouldClearCartDiscount: true,
+          byHandle: {},
+          eligible: false,
+          reason: "no_rules",
+          instituteKey,
+          proxyVerified,
+          via,
+        });
+      }
+
       return json({
         ok: true,
         byHandle: {},

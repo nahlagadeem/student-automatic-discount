@@ -251,18 +251,22 @@ async function deleteAutomaticDiscount(admin, discountNodeId) {
   }
 }
 
-async function findAutomaticDiscountNodeIds(admin) {
+async function findAutomaticDiscountNodeIds(admin, functionId) {
+  const normalizedFunctionId = String(functionId || "").trim();
   const data = await runAdminGraphql(
     admin,
     `#graphql
       query FindAutomaticDiscountNodes($query: String!) {
-        discountNodes(first: 25, query: $query) {
+        discountNodes(first: 100, query: $query) {
           nodes {
             id
             discount {
               __typename
               ... on DiscountAutomaticApp {
                 title
+                appDiscountType {
+                  functionId
+                }
               }
             }
           }
@@ -270,12 +274,18 @@ async function findAutomaticDiscountNodeIds(admin) {
       }
     `,
     {
-      query: `method:automatic title:"${DISCOUNT_TITLE}"`,
+      query: `method:automatic`,
     },
   );
 
   return (data?.discountNodes?.nodes ?? [])
     .filter((node) => String(node?.discount?.__typename || "").trim() === "DiscountAutomaticApp")
+    .filter((node) => {
+      const nodeFunctionId = String(node?.discount?.appDiscountType?.functionId || "").trim();
+      const nodeTitle = String(node?.discount?.title || "").trim();
+      if (normalizedFunctionId && nodeFunctionId === normalizedFunctionId) return true;
+      return normalizeFunctionTitle(nodeTitle) === normalizeFunctionTitle(DISCOUNT_TITLE);
+    })
     .map((node) => String(node?.id || "").trim())
     .filter(Boolean);
 }
@@ -417,7 +427,7 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
 
   const functionId = existingConfig?.functionId || (await getDiscountFunctionId(admin));
   let discountNodeId = existingConfig?.discountNodeId || "";
-  const fallbackDiscountNodeIds = await findAutomaticDiscountNodeIds(admin);
+  const fallbackDiscountNodeIds = await findAutomaticDiscountNodeIds(admin, functionId);
   const discountNodeIdsToDelete = new Set(
     [discountNodeId, ...fallbackDiscountNodeIds].map((value) => String(value || "").trim()).filter(Boolean),
   );
