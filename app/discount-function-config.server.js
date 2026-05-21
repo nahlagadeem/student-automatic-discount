@@ -231,7 +231,7 @@ async function deleteAutomaticDiscount(admin, discountNodeId) {
     `#graphql
       mutation DeleteAutomaticDiscount($id: ID!) {
         discountAutomaticDelete(id: $id) {
-          deletedDiscountId
+          deletedAutomaticDiscountId
           userErrors {
             field
             message

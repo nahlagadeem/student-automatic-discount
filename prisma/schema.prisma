@@ -68,6 +68,7 @@ model StudentDiscount {
   customerId     String
   code           String
   discountNodeId String?
+  shopifyDiscountId String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
