@@ -251,6 +251,35 @@ async function deleteAutomaticDiscount(admin, discountNodeId) {
   }
 }
 
+async function findAutomaticDiscountNodeIds(admin) {
+  const data = await runAdminGraphql(
+    admin,
+    `#graphql
+      query FindAutomaticDiscountNodes($query: String!) {
+        discountNodes(first: 25, query: $query) {
+          nodes {
+            id
+            discount {
+              __typename
+              ... on DiscountAutomaticApp {
+                title
+              }
+            }
+          }
+        }
+      }
+    `,
+    {
+      query: `method:automatic title:"${DISCOUNT_TITLE}"`,
+    },
+  );
+
+  return (data?.discountNodes?.nodes ?? [])
+    .filter((node) => String(node?.discount?.__typename || "").trim() === "DiscountAutomaticApp")
+    .map((node) => String(node?.id || "").trim())
+    .filter(Boolean);
+}
+
 async function findCustomerIdsByEmail(admin, email) {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) return [];
@@ -388,11 +417,15 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
 
   const functionId = existingConfig?.functionId || (await getDiscountFunctionId(admin));
   let discountNodeId = existingConfig?.discountNodeId || "";
+  const fallbackDiscountNodeIds = await findAutomaticDiscountNodeIds(admin);
+  const discountNodeIdsToDelete = new Set(
+    [discountNodeId, ...fallbackDiscountNodeIds].map((value) => String(value || "").trim()).filter(Boolean),
+  );
 
   if (!config.rules.length) {
-    if (discountNodeId) {
+    for (const nodeId of discountNodeIdsToDelete) {
       try {
-        await deleteAutomaticDiscount(admin, discountNodeId);
+        await deleteAutomaticDiscount(admin, nodeId);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (!/not found|invalid id|does not exist/i.test(message)) {
@@ -413,9 +446,9 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
   }
 
   try {
-    if (discountNodeId) {
+    for (const nodeId of discountNodeIdsToDelete) {
       try {
-        await deleteAutomaticDiscount(admin, discountNodeId);
+        await deleteAutomaticDiscount(admin, nodeId);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (!/not found|invalid id|does not exist/i.test(message)) {

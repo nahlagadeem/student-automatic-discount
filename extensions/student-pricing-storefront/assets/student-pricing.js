@@ -133,6 +133,28 @@
     priceElement.insertAdjacentElement("afterend", preview);
   }
 
+  async function clearCartDiscounts() {
+    const root =
+      (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) ||
+      "/";
+
+    const response = await fetch(`${root}cart/update.js`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json"
+      },
+      body: JSON.stringify({ discount: "" })
+    });
+
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => "");
+      const summary = bodyText.length > 200 ? `${bodyText.slice(0, 200)}...` : bodyText;
+      throw new Error(`Failed to clear cart discount (${response.status}): ${summary}`);
+    }
+  }
+
   function collectTargets() {
     const targets = [];
     const seen = new Set();
@@ -218,6 +240,14 @@
 
     if (currentToken !== requestToken) return;
     if (!payload || !payload.ok || !payload.byHandle) return;
+
+    if (payload.reason === "no_rules") {
+      try {
+        await clearCartDiscounts();
+      } catch (error) {
+        console.warn("[student-pricing] failed to clear cart discounts", error);
+      }
+    }
 
     if (observer) {
       observer.disconnect();
