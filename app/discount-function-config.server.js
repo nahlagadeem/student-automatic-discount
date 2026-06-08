@@ -10,6 +10,8 @@ const CONFIG_KEY = "function-configuration";
 const DISCOUNT_API_TYPE = "discount";
 const CUSTOMER_IDENTITY_NAMESPACE = "$app:student-discount";
 const CUSTOMER_INSTITUTE_KEY = "institute_key";
+const SHARED_CONFIG_NAMESPACE = "student-discount-shared";
+const SHARED_AUTOMATIC_CONFIG_KEY = "automatic-configuration";
 
 export async function ensureAutomaticDiscountConfigTable() {
   await prisma.$executeRawUnsafe(`
@@ -123,6 +125,11 @@ function normalizeFunctionTitle(value) {
 }
 
 function automaticDiscountInput(functionId, configValue, customerIds) {
+  const sharedConfigValue = JSON.stringify({
+    ...JSON.parse(configValue),
+    functionId,
+  });
+
   return {
     title: DISCOUNT_TITLE,
     functionId,
@@ -143,6 +150,12 @@ function automaticDiscountInput(functionId, configValue, customerIds) {
         key: CONFIG_KEY,
         type: "json",
         value: configValue,
+      },
+      {
+        namespace: SHARED_CONFIG_NAMESPACE,
+        key: SHARED_AUTOMATIC_CONFIG_KEY,
+        type: "json",
+        value: sharedConfigValue,
       },
     ],
   };
@@ -295,8 +308,7 @@ async function updateAutomaticDiscount(admin, discountNodeId, functionId, config
   return updatedDiscountNodeId;
 }
 
-async function findCodeDiscountNodeIds(admin, functionId) {
-  const normalizedFunctionId = String(functionId || "").trim();
+async function findCodeDiscountNodeIds(admin) {
   const data = await runAdminGraphql(
     admin,
     `#graphql
@@ -304,15 +316,20 @@ async function findCodeDiscountNodeIds(admin, functionId) {
         discountNodes(first: 100, query: $query) {
           nodes {
             id
+            metafield(namespace: "$app:category-tier-discount-native", key: "function-configuration") {
+              value
+            }
             discount {
               __typename
               ... on DiscountCodeApp {
                 title
+                codes(first: 5) {
+                  nodes {
+                    code
+                  }
+                }
                 appDiscountType {
                   functionId
-                }
-                metafield(namespace: "$app:category-tier-discount-native", key: "function-configuration") {
-                  value
                 }
               }
             }
@@ -327,13 +344,14 @@ async function findCodeDiscountNodeIds(admin, functionId) {
 
   return (data?.discountNodes?.nodes ?? [])
     .filter((node) => String(node?.discount?.__typename || "").trim() === "DiscountCodeApp")
-    .filter((node) => {
-      const nodeFunctionId = String(node?.discount?.appDiscountType?.functionId || "").trim();
-      return normalizedFunctionId && nodeFunctionId === normalizedFunctionId;
-    })
     .map((node) => ({
       id: String(node?.id || "").trim(),
-      configValue: String(node?.discount?.metafield?.value || "").trim(),
+      functionId: String(node?.discount?.appDiscountType?.functionId || "").trim(),
+      title: String(node?.discount?.title || "").trim(),
+      codes: (node?.discount?.codes?.nodes ?? [])
+        .map((codeNode) => String(codeNode?.code || "").trim())
+        .filter(Boolean),
+      configValue: String(node?.metafield?.value || "").trim(),
     }))
     .filter((node) => node.id);
 }
@@ -371,9 +389,23 @@ function buildCodeDiscountExclusionConfig(configValue, automaticConfig) {
 }
 
 async function updateCodeDiscountCombination(admin, discountNode, automaticConfig) {
-  const configValue = JSON.stringify(
-    buildCodeDiscountExclusionConfig(discountNode.configValue, automaticConfig),
-  );
+  const metafields = [
+    {
+      namespace: SHARED_CONFIG_NAMESPACE,
+      key: SHARED_AUTOMATIC_CONFIG_KEY,
+      type: "json",
+      value: JSON.stringify(automaticConfig),
+    },
+  ];
+
+  if (discountNode.functionId === String(automaticConfig?.functionId || "")) {
+    metafields.push({
+      namespace: CONFIG_NAMESPACE,
+      key: CONFIG_KEY,
+      type: "json",
+      value: JSON.stringify(buildCodeDiscountExclusionConfig(discountNode.configValue, automaticConfig)),
+    });
+  }
 
   const data = await runAdminGraphql(
     admin,
@@ -399,14 +431,7 @@ async function updateCodeDiscountCombination(admin, discountNode, automaticConfi
           productDiscounts: true,
           shippingDiscounts: false,
         },
-        metafields: [
-          {
-            namespace: CONFIG_NAMESPACE,
-            key: CONFIG_KEY,
-            type: "json",
-            value: configValue,
-          },
-        ],
+        metafields,
       },
     },
   );
@@ -416,20 +441,32 @@ async function updateCodeDiscountCombination(admin, discountNode, automaticConfi
     throw new Error(payload.userErrors.map((error) => error.message).join("; "));
   }
 
-  return payload?.codeAppDiscount?.discountId || discountNode.id;
+  return {
+    id: payload?.codeAppDiscount?.discountId || discountNode.id,
+    title: discountNode.title,
+    codes: discountNode.codes,
+    functionId: discountNode.functionId,
+  };
 }
 
 async function syncCodeDiscountCombinations(admin, functionId, automaticConfig) {
-  const codeDiscountNodes = await findCodeDiscountNodeIds(admin, functionId);
-  const updatedCodeDiscountNodeIds = [];
+  const automaticConfigWithFunctionId = {
+    ...automaticConfig,
+    functionId,
+  };
+  const codeDiscountNodes = await findCodeDiscountNodeIds(admin);
+  const ownedCodeDiscountNodes = codeDiscountNodes.filter((node) => node.functionId === functionId);
+  const updatedCodeDiscounts = [];
 
-  for (const node of codeDiscountNodes) {
-    updatedCodeDiscountNodeIds.push(await updateCodeDiscountCombination(admin, node, automaticConfig));
+  for (const node of ownedCodeDiscountNodes) {
+    updatedCodeDiscounts.push(await updateCodeDiscountCombination(admin, node, automaticConfigWithFunctionId));
   }
 
   return {
     codeDiscountCount: codeDiscountNodes.length,
-    updatedCodeDiscountNodeIds,
+    skippedForeignCodeDiscountCount: codeDiscountNodes.length - ownedCodeDiscountNodes.length,
+    updatedCodeDiscountNodeIds: updatedCodeDiscounts.map((discount) => discount.id),
+    updatedCodeDiscounts,
   };
 }
 
