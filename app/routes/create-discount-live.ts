@@ -1,10 +1,12 @@
 import {
   createShopifyCodeDiscount,
+  deleteShopifyDiscountCode,
   deleteStudentDiscountRow,
   ensureStudentDiscountTable,
   errorMessage,
   findDiscountNodeIdByCode,
   findStudentDiscount,
+  isStudentCodeAppDiscount,
   json,
   normalizeShopDomain,
   resolveAdminClient,
@@ -76,6 +78,35 @@ async function handle(request: Request) {
     const liveDiscountNodeId = storedCode ? await findDiscountNodeIdByCode(admin, storedCode) : "";
 
     if (liveDiscountNodeId) {
+      const isCompatibleCode = await isStudentCodeAppDiscount(admin, liveDiscountNodeId);
+      if (!isCompatibleCode) {
+        console.warn("[create-discount-live] replacing legacy basic discount code with app discount code", {
+          shop,
+          customerId,
+          code: storedCode,
+          discountNodeId: liveDiscountNodeId,
+        });
+
+        await deleteShopifyDiscountCode(admin, liveDiscountNodeId);
+        const recreated = await createShopifyCodeDiscount(admin, storedCode, [buildCustomerGid(customerId)]);
+        await upsertStudentDiscount({
+          shop,
+          customerId,
+          code: recreated.code,
+          discountNodeId: recreated.discountNodeId,
+        });
+
+        return json({
+          ok: true,
+          migrated: true,
+          code: recreated.code,
+          discountNodeId: recreated.discountNodeId,
+          customerId,
+          via,
+          proxyVerified,
+        });
+      }
+
       if (liveDiscountNodeId !== storedDiscountNodeId) {
         await upsertStudentDiscount({
           shop,

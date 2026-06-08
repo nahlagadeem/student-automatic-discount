@@ -2,6 +2,11 @@ import prisma from "./db.server";
 import { unauthenticated } from "./shopify.server";
 import { buildCustomerGid } from "./portal-user-links.server";
 
+const DISCOUNT_FUNCTION_TITLE = "Discounted price";
+const DISCOUNT_API_TYPE = "discount";
+const CONFIG_NAMESPACE = "$app:category-tier-discount-native";
+const CONFIG_KEY = "function-configuration";
+
 const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
   "Cache-Control": "no-store",
@@ -72,6 +77,101 @@ export async function runAdminGraphql(admin, query, variables) {
   }
 
   return payload?.data ?? null;
+}
+
+function normalizeFunctionTitle(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+async function getDiscountFunctionId(admin) {
+  const data = await runAdminGraphql(
+    admin,
+    `#graphql
+      query GetShopifyFunctions {
+        shopifyFunctions(first: 50) {
+          nodes {
+            id
+            title
+            apiType
+          }
+        }
+      }
+    `,
+  );
+
+  const nodes = data?.shopifyFunctions?.nodes ?? [];
+  const discountNodes = nodes.filter(
+    (node) => String(node?.apiType || "").trim().toLowerCase() === DISCOUNT_API_TYPE,
+  );
+
+  const exactMatch = discountNodes.find(
+    (node) => normalizeFunctionTitle(node?.title) === normalizeFunctionTitle(DISCOUNT_FUNCTION_TITLE),
+  );
+  if (exactMatch?.id) return exactMatch.id;
+
+  if (discountNodes.length === 1 && discountNodes[0]?.id) {
+    return discountNodes[0].id;
+  }
+
+  const fuzzyMatch = discountNodes.find((node) =>
+    /student|institute|category|discounted price/.test(normalizeFunctionTitle(node?.title)),
+  );
+  if (fuzzyMatch?.id) return fuzzyMatch.id;
+
+  const availableTitles = discountNodes
+    .map((node) => String(node?.title || "").trim())
+    .filter(Boolean)
+    .join(", ");
+  throw new Error(
+    `Unable to locate Shopify discount function "${DISCOUNT_FUNCTION_TITLE}". Available discount functions: ${availableTitles || "none"}.`,
+  );
+}
+
+async function fetchAutomaticDiscountFunctionConfig(admin, functionId) {
+  const data = await runAdminGraphql(
+    admin,
+    `#graphql
+      query FindAutomaticDiscountConfig($query: String!) {
+        discountNodes(first: 100, query: $query) {
+          nodes {
+            discount {
+              __typename
+              ... on DiscountAutomaticApp {
+                appDiscountType {
+                  functionId
+                }
+                metafield(namespace: "$app:category-tier-discount-native", key: "function-configuration") {
+                  value
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+    {
+      query: "method:automatic",
+    },
+  );
+
+  const normalizedFunctionId = String(functionId || "").trim();
+  const node = (data?.discountNodes?.nodes ?? []).find((entry) => {
+    const discount = entry?.discount;
+    return (
+      discount?.__typename === "DiscountAutomaticApp" &&
+      String(discount?.appDiscountType?.functionId || "").trim() === normalizedFunctionId &&
+      String(discount?.metafield?.value || "").trim()
+    );
+  });
+
+  const rawValue = String(node?.discount?.metafield?.value || "").trim();
+  if (!rawValue) return null;
+
+  try {
+    return JSON.parse(rawValue);
+  } catch {
+    return null;
+  }
 }
 
 export async function ensureStudentDiscountTable() {
@@ -216,6 +316,45 @@ export async function findDiscountNodeIdByCode(admin, code) {
   return nodeId;
 }
 
+export async function isStudentCodeAppDiscount(admin, discountNodeId) {
+  const normalizedDiscountNodeId = String(discountNodeId || "").trim();
+  if (!normalizedDiscountNodeId) return false;
+
+  const data = await runAdminGraphql(
+    admin,
+    `#graphql
+      query CheckStudentCodeAppDiscount($id: ID!) {
+        node(id: $id) {
+          __typename
+          ... on DiscountCodeNode {
+            codeDiscount {
+              __typename
+              ... on DiscountCodeApp {
+                metafield(namespace: "$app:category-tier-discount-native", key: "function-configuration") {
+                  value
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+    {
+      id: normalizedDiscountNodeId,
+    },
+  );
+
+  const discount = data?.node?.codeDiscount;
+  if (discount?.__typename !== "DiscountCodeApp") return false;
+
+  try {
+    const config = JSON.parse(String(discount?.metafield?.value || "{}"));
+    return config?.mode === "student-code";
+  } catch {
+    return false;
+  }
+}
+
 export async function createShopifyCodeDiscount(admin, code, customerIds = []) {
   const eligibleCustomerIds = Array.from(
     new Set(customerIds.map((value) => buildCustomerGid(value)).filter(Boolean)),
@@ -225,20 +364,41 @@ export async function createShopifyCodeDiscount(admin, code, customerIds = []) {
     throw new Error("No eligible customer IDs were provided for the discount.");
   }
 
+  const functionId = await getDiscountFunctionId(admin);
+  const automaticConfig = await fetchAutomaticDiscountFunctionConfig(admin, functionId);
+  const functionConfig = {
+    version: 3,
+    mode: "student-code",
+    codePercentage: 50,
+    automaticConfig,
+  };
+
   const result = await admin.graphql(
-    `
-      mutation discountCodeBasicCreate($basicCodeDiscount: DiscountCodeBasicInput!) {
-        discountCodeBasicCreate(basicCodeDiscount: $basicCodeDiscount) {
-          codeDiscountNode { id }
-          userErrors { field message }
+    `#graphql
+      mutation discountCodeAppCreate($codeAppDiscount: DiscountCodeAppInput!) {
+        discountCodeAppCreate(codeAppDiscount: $codeAppDiscount) {
+          codeAppDiscount {
+            discountId
+          }
+          userErrors {
+            field
+            message
+          }
         }
       }
     `,
     {
       variables: {
-        basicCodeDiscount: {
+        codeAppDiscount: {
           title: `Institute Discount ${code}`,
           code,
+          functionId,
+          discountClasses: ["PRODUCT"],
+          combinesWith: {
+            orderDiscounts: false,
+            productDiscounts: true,
+            shippingDiscounts: false,
+          },
           startsAt: new Date().toISOString(),
           context: {
             customers: {
@@ -246,11 +406,15 @@ export async function createShopifyCodeDiscount(admin, code, customerIds = []) {
             },
           },
           appliesOncePerCustomer: true,
-          customerGets: {
-            value: { percentage: 0.5 },
-            items: { all: true },
-          },
           usageLimit: 1,
+          metafields: [
+            {
+              namespace: CONFIG_NAMESPACE,
+              key: CONFIG_KEY,
+              type: "json",
+              value: JSON.stringify(functionConfig),
+            },
+          ],
         },
       },
     },
@@ -273,14 +437,14 @@ export async function createShopifyCodeDiscount(admin, code, customerIds = []) {
     throw error;
   }
 
-  const userErrors = body?.data?.discountCodeBasicCreate?.userErrors ?? [];
+  const userErrors = body?.data?.discountCodeAppCreate?.userErrors ?? [];
   if (userErrors.length) {
     const error = new Error(userErrors.map((entry) => String(entry?.message || "").trim()).filter(Boolean).join("; "));
     error.userErrors = userErrors;
     throw error;
   }
 
-  const discountNodeId = String(body?.data?.discountCodeBasicCreate?.codeDiscountNode?.id || "").trim();
+  const discountNodeId = String(body?.data?.discountCodeAppCreate?.codeAppDiscount?.discountId || "").trim();
   if (!discountNodeId) {
     throw new Error("Shopify did not return a discount id for the code discount.");
   }

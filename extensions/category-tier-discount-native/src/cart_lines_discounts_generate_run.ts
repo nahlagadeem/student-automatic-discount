@@ -17,6 +17,9 @@ type TierConfig = {
 
 type RuleConfig = {
   version?: number;
+  mode?: string;
+  codePercentage?: number;
+  automaticConfig?: RuleConfig | null;
   rules?: {
     instituteKey?: string;
     instituteLabel?: string;
@@ -64,18 +67,30 @@ function readTierConfig(input: CartInput): TierConfig {
   if (!rawValue) return DEFAULT_CONFIG;
 
   try {
-    const parsed = JSON.parse(rawValue) as Partial<TierConfig>;
+    const parsed = JSON.parse(rawValue) as Partial<TierConfig> & {automaticConfig?: Partial<TierConfig> | null};
+    const config = parsed.automaticConfig && parsed.mode === "student-code" ? parsed.automaticConfig : parsed;
     return {
-      ipadPercentage: clampPercentage(parsed.ipadPercentage, DEFAULT_CONFIG.ipadPercentage),
-      macPercentage: clampPercentage(parsed.macPercentage, DEFAULT_CONFIG.macPercentage),
-      accessoriesPercentage: clampPercentage(parsed.accessoriesPercentage, DEFAULT_CONFIG.accessoriesPercentage),
-      iphonePercentage: clampPercentage(parsed.iphonePercentage, DEFAULT_CONFIG.iphonePercentage),
-      appleWatchPercentage: clampPercentage(parsed.appleWatchPercentage, DEFAULT_CONFIG.appleWatchPercentage),
-      tvHomePercentage: clampPercentage(parsed.tvHomePercentage, DEFAULT_CONFIG.tvHomePercentage),
-      airpodsPercentage: clampPercentage(parsed.airpodsPercentage, DEFAULT_CONFIG.airpodsPercentage),
+      ipadPercentage: clampPercentage(config?.ipadPercentage, DEFAULT_CONFIG.ipadPercentage),
+      macPercentage: clampPercentage(config?.macPercentage, DEFAULT_CONFIG.macPercentage),
+      accessoriesPercentage: clampPercentage(config?.accessoriesPercentage, DEFAULT_CONFIG.accessoriesPercentage),
+      iphonePercentage: clampPercentage(config?.iphonePercentage, DEFAULT_CONFIG.iphonePercentage),
+      appleWatchPercentage: clampPercentage(config?.appleWatchPercentage, DEFAULT_CONFIG.appleWatchPercentage),
+      tvHomePercentage: clampPercentage(config?.tvHomePercentage, DEFAULT_CONFIG.tvHomePercentage),
+      airpodsPercentage: clampPercentage(config?.airpodsPercentage, DEFAULT_CONFIG.airpodsPercentage),
     };
   } catch {
     return DEFAULT_CONFIG;
+  }
+}
+
+function readRawConfig(input: CartInput): RuleConfig {
+  const rawValue = input.discount.metafield?.value;
+  if (!rawValue) return {};
+
+  try {
+    return JSON.parse(rawValue) as RuleConfig;
+  } catch {
+    return {};
   }
 }
 
@@ -84,7 +99,11 @@ function readRuleConfig(input: CartInput): MatchedRule[] {
   if (!rawValue) return [];
 
   try {
-    const parsed = JSON.parse(rawValue) as RuleConfig;
+    const rawConfig = JSON.parse(rawValue) as RuleConfig;
+    const parsed =
+      rawConfig.mode === "student-code" && rawConfig.automaticConfig
+        ? rawConfig.automaticConfig
+        : rawConfig;
     if (!Array.isArray(parsed.rules)) return [];
 
     const buyerInstituteKey = getBuyerInstituteKeyFromTags(input);
@@ -143,6 +162,9 @@ export function cartLinesDiscountsGenerateRun(
     return {operations: []};
   }
 
+  const rawConfig = readRawConfig(input);
+  const isStudentCodeDiscount = rawConfig.mode === "student-code";
+  const codePercentage = clampPercentage(rawConfig.codePercentage, 0);
   const matchedRules = readRuleConfig(input);
   const config = readTierConfig(input);
   const productLinesByPercent: Record<number, {id: string; quantity: number}[]> =
@@ -165,11 +187,17 @@ export function cartLinesDiscountsGenerateRun(
           0,
         );
 
-    if (percentage <= 0) continue;
-    if (!productLinesByPercent[percentage]) {
-      productLinesByPercent[percentage] = [];
+    const appliedPercentage = isStudentCodeDiscount
+      ? percentage > 0
+        ? 0
+        : codePercentage
+      : percentage;
+
+    if (appliedPercentage <= 0) continue;
+    if (!productLinesByPercent[appliedPercentage]) {
+      productLinesByPercent[appliedPercentage] = [];
     }
-    productLinesByPercent[percentage].push({id: line.id, quantity: line.quantity});
+    productLinesByPercent[appliedPercentage].push({id: line.id, quantity: line.quantity});
   }
 
   const candidates = Object.entries(productLinesByPercent).map(

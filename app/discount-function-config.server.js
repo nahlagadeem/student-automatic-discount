@@ -205,6 +205,11 @@ async function createAutomaticDiscount(admin, functionId, configValue, eligibleC
         title: DISCOUNT_TITLE,
         functionId,
         discountClasses: ["PRODUCT"],
+        combinesWith: {
+          orderDiscounts: false,
+          productDiscounts: true,
+          shippingDiscounts: false,
+        },
         startsAt: new Date().toISOString(),
         context: {
           customers: {
