@@ -311,6 +311,9 @@ async function findCodeDiscountNodeIds(admin, functionId) {
                 appDiscountType {
                   functionId
                 }
+                metafield(namespace: "$app:category-tier-discount-native", key: "function-configuration") {
+                  value
+                }
               }
             }
           }
@@ -328,11 +331,50 @@ async function findCodeDiscountNodeIds(admin, functionId) {
       const nodeFunctionId = String(node?.discount?.appDiscountType?.functionId || "").trim();
       return normalizedFunctionId && nodeFunctionId === normalizedFunctionId;
     })
-    .map((node) => String(node?.id || "").trim())
-    .filter(Boolean);
+    .map((node) => ({
+      id: String(node?.id || "").trim(),
+      configValue: String(node?.discount?.metafield?.value || "").trim(),
+    }))
+    .filter((node) => node.id);
 }
 
-async function updateCodeDiscountCombination(admin, discountNodeId) {
+function buildCodeDiscountExclusionConfig(configValue, automaticConfig) {
+  let parsedConfig = {};
+  try {
+    parsedConfig = JSON.parse(String(configValue || "{}"));
+  } catch {
+    parsedConfig = {};
+  }
+
+  if (parsedConfig?.mode === "student-code") {
+    return {
+      ...parsedConfig,
+      version: 4,
+      automaticConfig,
+    };
+  }
+
+  if (parsedConfig?.mode === "code-with-automatic-exclusions") {
+    return {
+      ...parsedConfig,
+      version: 4,
+      automaticConfig,
+    };
+  }
+
+  return {
+    version: 4,
+    mode: "code-with-automatic-exclusions",
+    codeConfig: parsedConfig,
+    automaticConfig,
+  };
+}
+
+async function updateCodeDiscountCombination(admin, discountNode, automaticConfig) {
+  const configValue = JSON.stringify(
+    buildCodeDiscountExclusionConfig(discountNode.configValue, automaticConfig),
+  );
+
   const data = await runAdminGraphql(
     admin,
     `#graphql
@@ -350,13 +392,21 @@ async function updateCodeDiscountCombination(admin, discountNodeId) {
       }
     `,
     {
-      id: discountNodeId,
+      id: discountNode.id,
       codeAppDiscount: {
         combinesWith: {
           orderDiscounts: false,
           productDiscounts: true,
           shippingDiscounts: false,
         },
+        metafields: [
+          {
+            namespace: CONFIG_NAMESPACE,
+            key: CONFIG_KEY,
+            type: "json",
+            value: configValue,
+          },
+        ],
       },
     },
   );
@@ -366,19 +416,19 @@ async function updateCodeDiscountCombination(admin, discountNodeId) {
     throw new Error(payload.userErrors.map((error) => error.message).join("; "));
   }
 
-  return payload?.codeAppDiscount?.discountId || discountNodeId;
+  return payload?.codeAppDiscount?.discountId || discountNode.id;
 }
 
-async function syncCodeDiscountCombinations(admin, functionId) {
-  const codeDiscountNodeIds = await findCodeDiscountNodeIds(admin, functionId);
+async function syncCodeDiscountCombinations(admin, functionId, automaticConfig) {
+  const codeDiscountNodes = await findCodeDiscountNodeIds(admin, functionId);
   const updatedCodeDiscountNodeIds = [];
 
-  for (const nodeId of codeDiscountNodeIds) {
-    updatedCodeDiscountNodeIds.push(await updateCodeDiscountCombination(admin, nodeId));
+  for (const node of codeDiscountNodes) {
+    updatedCodeDiscountNodeIds.push(await updateCodeDiscountCombination(admin, node, automaticConfig));
   }
 
   return {
-    codeDiscountCount: codeDiscountNodeIds.length,
+    codeDiscountCount: codeDiscountNodes.length,
     updatedCodeDiscountNodeIds,
   };
 }
@@ -711,7 +761,7 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
     create: { shop, discountNodeId, functionId },
   });
 
-  const codeSyncResult = await syncCodeDiscountCombinations(admin, functionId);
+  const codeSyncResult = await syncCodeDiscountCombinations(admin, functionId, config);
 
   return {
     discountNodeId,
