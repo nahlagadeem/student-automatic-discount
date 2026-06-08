@@ -121,6 +121,32 @@ function normalizeFunctionTitle(value) {
   return String(value || "").trim().toLowerCase();
 }
 
+function automaticDiscountInput(functionId, configValue, customerIds) {
+  return {
+    title: DISCOUNT_TITLE,
+    functionId,
+    discountClasses: ["PRODUCT"],
+    combinesWith: {
+      orderDiscounts: false,
+      productDiscounts: true,
+      shippingDiscounts: false,
+    },
+    context: {
+      customers: {
+        add: customerIds,
+      },
+    },
+    metafields: [
+      {
+        namespace: CONFIG_NAMESPACE,
+        key: CONFIG_KEY,
+        type: "json",
+        value: configValue,
+      },
+    ],
+  };
+}
+
 async function getDiscountFunctionId(admin) {
   const data = await runAdminGraphql(
     admin,
@@ -202,28 +228,8 @@ async function createAutomaticDiscount(admin, functionId, configValue, eligibleC
     `,
     {
       automaticAppDiscount: {
-        title: DISCOUNT_TITLE,
-        functionId,
-        discountClasses: ["PRODUCT"],
-        combinesWith: {
-          orderDiscounts: false,
-          productDiscounts: true,
-          shippingDiscounts: false,
-        },
+        ...automaticDiscountInput(functionId, configValue, customerIds),
         startsAt: new Date().toISOString(),
-        context: {
-          customers: {
-            add: customerIds,
-          },
-        },
-        metafields: [
-          {
-            namespace: CONFIG_NAMESPACE,
-            key: CONFIG_KEY,
-            type: "json",
-            value: configValue,
-          },
-        ],
       },
     },
   );
@@ -239,6 +245,53 @@ async function createAutomaticDiscount(admin, functionId, configValue, eligibleC
   }
 
   return discountNodeId;
+}
+
+async function updateAutomaticDiscount(admin, discountNodeId, functionId, configValue, eligibleCustomerIds = []) {
+  const customerIds = Array.from(
+    new Set(eligibleCustomerIds.map((value) => buildCustomerGid(value)).filter(Boolean)),
+  );
+
+  if (!customerIds.length) {
+    throw new Error("No eligible customer IDs were provided for the automatic discount.");
+  }
+
+  const data = await runAdminGraphql(
+    admin,
+    `#graphql
+      mutation UpdateAutomaticDiscount($id: ID!, $automaticAppDiscount: DiscountAutomaticAppInput!) {
+        discountAutomaticAppUpdate(id: $id, automaticAppDiscount: $automaticAppDiscount) {
+          automaticAppDiscount {
+            discountId
+            title
+            appDiscountType {
+              functionId
+            }
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `,
+    {
+      id: discountNodeId,
+      automaticAppDiscount: automaticDiscountInput(functionId, configValue, customerIds),
+    },
+  );
+
+  const payload = data?.discountAutomaticAppUpdate;
+  if (payload?.userErrors?.length) {
+    throw new Error(payload.userErrors.map((error) => error.message).join("; "));
+  }
+
+  const updatedDiscountNodeId = payload?.automaticAppDiscount?.discountId || discountNodeId;
+  if (!updatedDiscountNodeId) {
+    throw new Error("Shopify did not return a discount id for the automatic discount update.");
+  }
+
+  return updatedDiscountNodeId;
 }
 
 async function findEligibleCustomerIdsForRules(shop, rules) {
@@ -330,7 +383,7 @@ async function findAutomaticDiscountNodeIds(admin, functionId) {
       }
     `,
     {
-      query: `method:automatic`,
+      query: `method:automatic title:"${DISCOUNT_TITLE}"`,
     },
   );
 
@@ -536,7 +589,11 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
   }
 
   try {
-    for (const nodeId of discountNodeIdsToDelete) {
+    const existingDiscountNodeIds = Array.from(discountNodeIdsToDelete);
+    const nodeIdToUpdate = existingDiscountNodeIds[0] || "";
+    const extraNodeIdsToDelete = existingDiscountNodeIds.slice(1);
+
+    for (const nodeId of extraNodeIdsToDelete) {
       try {
         await deleteAutomaticDiscount(admin, nodeId);
       } catch (error) {
@@ -547,10 +604,12 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
       }
     }
 
-    discountNodeId = await createAutomaticDiscount(admin, functionId, configValue, eligibleCustomerIds);
+    discountNodeId = nodeIdToUpdate
+      ? await updateAutomaticDiscount(admin, nodeIdToUpdate, functionId, configValue, eligibleCustomerIds)
+      : await createAutomaticDiscount(admin, functionId, configValue, eligibleCustomerIds);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (!discountNodeId || !/not found|invalid id|does not exist/i.test(message)) {
+    if (!discountNodeId || !/not found|invalid id|does not exist|has already been taken/i.test(message)) {
       throw error;
     }
 
