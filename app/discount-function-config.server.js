@@ -81,6 +81,7 @@ function summarizeGraphqlPayload(payloadText) {
   const userErrors = [
     ...(payload?.data?.discountAutomaticAppCreate?.userErrors ?? []),
     ...(payload?.data?.discountAutomaticAppUpdate?.userErrors ?? []),
+    ...(payload?.data?.discountCodeAppUpdate?.userErrors ?? []),
     ...(payload?.data?.metafieldsSet?.userErrors ?? []),
   ];
 
@@ -292,6 +293,94 @@ async function updateAutomaticDiscount(admin, discountNodeId, functionId, config
   }
 
   return updatedDiscountNodeId;
+}
+
+async function findCodeDiscountNodeIds(admin, functionId) {
+  const normalizedFunctionId = String(functionId || "").trim();
+  const data = await runAdminGraphql(
+    admin,
+    `#graphql
+      query FindCodeDiscountNodes($query: String!) {
+        discountNodes(first: 100, query: $query) {
+          nodes {
+            id
+            discount {
+              __typename
+              ... on DiscountCodeApp {
+                title
+                appDiscountType {
+                  functionId
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+    {
+      query: "method:code",
+    },
+  );
+
+  return (data?.discountNodes?.nodes ?? [])
+    .filter((node) => String(node?.discount?.__typename || "").trim() === "DiscountCodeApp")
+    .filter((node) => {
+      const nodeFunctionId = String(node?.discount?.appDiscountType?.functionId || "").trim();
+      return normalizedFunctionId && nodeFunctionId === normalizedFunctionId;
+    })
+    .map((node) => String(node?.id || "").trim())
+    .filter(Boolean);
+}
+
+async function updateCodeDiscountCombination(admin, discountNodeId) {
+  const data = await runAdminGraphql(
+    admin,
+    `#graphql
+      mutation UpdateCodeDiscountCombination($id: ID!, $codeAppDiscount: DiscountCodeAppInput!) {
+        discountCodeAppUpdate(id: $id, codeAppDiscount: $codeAppDiscount) {
+          codeAppDiscount {
+            discountId
+            title
+          }
+          userErrors {
+            field
+            message
+          }
+        }
+      }
+    `,
+    {
+      id: discountNodeId,
+      codeAppDiscount: {
+        combinesWith: {
+          orderDiscounts: false,
+          productDiscounts: true,
+          shippingDiscounts: false,
+        },
+      },
+    },
+  );
+
+  const payload = data?.discountCodeAppUpdate;
+  if (payload?.userErrors?.length) {
+    throw new Error(payload.userErrors.map((error) => error.message).join("; "));
+  }
+
+  return payload?.codeAppDiscount?.discountId || discountNodeId;
+}
+
+async function syncCodeDiscountCombinations(admin, functionId) {
+  const codeDiscountNodeIds = await findCodeDiscountNodeIds(admin, functionId);
+  const updatedCodeDiscountNodeIds = [];
+
+  for (const nodeId of codeDiscountNodeIds) {
+    updatedCodeDiscountNodeIds.push(await updateCodeDiscountCombination(admin, nodeId));
+  }
+
+  return {
+    codeDiscountCount: codeDiscountNodeIds.length,
+    updatedCodeDiscountNodeIds,
+  };
 }
 
 async function findEligibleCustomerIdsForRules(shop, rules) {
@@ -622,10 +711,13 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
     create: { shop, discountNodeId, functionId },
   });
 
+  const codeSyncResult = await syncCodeDiscountCombinations(admin, functionId);
+
   return {
     discountNodeId,
     functionId,
     ruleCount: config.rules.length,
+    ...codeSyncResult,
   };
 }
 
