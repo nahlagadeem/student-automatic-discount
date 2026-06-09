@@ -15,7 +15,14 @@ const SHARED_AUTOMATIC_CONFIG_KEY = "automatic-configuration";
 export const LIMITED_TIME_PRODUCT_OFFER = {
   key: "macbook-neo-256gb-limited-offer",
   productId: "gid://shopify/Product/9213557440730",
+  productHandle: "iphone-17e",
   storageOptionValue: "256GB NO Touch ID",
+  variantIds: [
+    "gid://shopify/ProductVariant/47725809139930",
+    "gid://shopify/ProductVariant/47725818282202",
+    "gid://shopify/ProductVariant/47725818314970",
+    "gid://shopify/ProductVariant/47725818347738",
+  ],
   discountAmount: 409,
   targetPrice: 2390,
   label: "Limited time offer",
@@ -75,6 +82,22 @@ export function buildFunctionConfiguration(rules, options = {}) {
 
 async function buildLimitedTimeProductOffers(admin) {
   const offer = LIMITED_TIME_PRODUCT_OFFER;
+  if (Array.isArray(offer.variantIds) && offer.variantIds.length) {
+    return [
+      {
+        key: offer.key,
+        productId: offer.productId,
+        productHandle: offer.productHandle,
+        variantIds: offer.variantIds,
+        discountAmount: offer.discountAmount,
+        targetPrice: offer.targetPrice,
+        label: offer.label,
+        startDateTime: offer.startDateTime,
+        endDateTime: offer.endDateTime,
+      },
+    ];
+  }
+
   const data = await runAdminGraphql(
     admin,
     `#graphql
