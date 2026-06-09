@@ -524,16 +524,32 @@ async function syncCodeDiscountCombinations(admin, functionId, automaticConfig) 
   const codeDiscountNodes = await findCodeDiscountNodeIds(admin);
   const ownedCodeDiscountNodes = codeDiscountNodes;
   const updatedCodeDiscounts = [];
+  const skippedCodeDiscounts = [];
 
   for (const node of ownedCodeDiscountNodes) {
-    updatedCodeDiscounts.push(await updateCodeDiscountCombination(admin, node, automaticConfigWithFunctionId));
+    try {
+      updatedCodeDiscounts.push(await updateCodeDiscountCombination(admin, node, automaticConfigWithFunctionId));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (!/not found|invalid id|does not exist/i.test(message)) {
+        throw error;
+      }
+      skippedCodeDiscounts.push({
+        id: node.id,
+        title: node.title,
+        codes: node.codes,
+        error: message,
+      });
+    }
   }
 
   return {
     codeDiscountCount: codeDiscountNodes.length,
     skippedForeignCodeDiscountCount: codeDiscountNodes.length - ownedCodeDiscountNodes.length,
+    skippedMissingCodeDiscountCount: skippedCodeDiscounts.length,
     updatedCodeDiscountNodeIds: updatedCodeDiscounts.map((discount) => discount.id),
     updatedCodeDiscounts,
+    skippedCodeDiscounts,
   };
 }
 
