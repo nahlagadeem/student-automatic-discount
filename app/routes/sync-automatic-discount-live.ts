@@ -6,7 +6,7 @@ import {
   syncPortalUsersToCustomerTags,
 } from "../discount-function-config.server";
 import { ensureAutomaticDiscountRuleTable } from "../automatic-discount-rules.server";
-import { unauthenticated } from "../shopify.server";
+import { resolveAdminClient } from "../student-discount.server";
 
 const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
@@ -55,7 +55,7 @@ async function handle(request: Request) {
       orderBy: [{ instituteLabel: "asc" }, { categoryLabel: "asc" }],
     });
 
-    const { admin } = await unauthenticated.admin(shop);
+    const { admin } = await resolveAdminClient(shop);
     const portalSyncResult = await syncPortalUsersToCustomerTags({ admin, shop, rules });
     const syncResult = await syncAutomaticDiscountRules({ admin, shop, rules });
 
