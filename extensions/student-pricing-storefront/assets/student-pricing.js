@@ -20,6 +20,17 @@
     "li",
     "article"
   ].join(",");
+  const CART_LINE_SELECTOR = [
+    "[data-cart-item]",
+    ".cart-item",
+    ".cart__item",
+    ".line-item",
+    "tr",
+    "li"
+  ].join(",");
+  const LIMITED_OFFER_HANDLE = "iphone-17e";
+  const LIMITED_OFFER_TITLE = "13-inch macbook neo";
+  const LIMITED_OFFER_STORAGE = "256gb no touch id";
 
   let scanTimer = 0;
   let observer = null;
@@ -204,6 +215,25 @@
       if (seen.has(key)) continue;
       seen.add(key);
       targets.push({ handle, priceElements, key });
+    }
+
+    const cartLines = document.querySelectorAll(CART_LINE_SELECTOR);
+    for (const root of cartLines) {
+      if (!(root instanceof HTMLElement)) continue;
+
+      const text = String(root.textContent || "").toLowerCase();
+      if (!text.includes(LIMITED_OFFER_TITLE) || !text.includes(LIMITED_OFFER_STORAGE)) continue;
+
+      const priceElements = findVisiblePriceElements(root);
+      if (!priceElements.length) continue;
+
+      if (!root.dataset.studentPricingKey) {
+        root.dataset.studentPricingKey = `${LIMITED_OFFER_HANDLE}-cart-${seen.size + 1}`;
+      }
+      const key = `${LIMITED_OFFER_HANDLE}::${root.dataset.studentPricingKey}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      targets.push({ handle: LIMITED_OFFER_HANDLE, priceElements, key });
     }
 
     return targets;

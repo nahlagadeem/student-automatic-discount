@@ -1,6 +1,6 @@
 import prisma from "./db.server";
 import { getInstituteByLabel } from "./institutes";
-import { buildCustomerGid, linkPortalUserToCustomer } from "./portal-user-links.server";
+import { linkPortalUserToCustomer } from "./portal-user-links.server";
 import { setCustomerPortalProfileMetafields } from "./customer-profile-metafields.server";
 
 const DISCOUNT_TITLE = "Discounted price";
@@ -190,7 +190,7 @@ function normalizeFunctionTitle(value) {
   return String(value || "").trim().toLowerCase();
 }
 
-function automaticDiscountInput(functionId, configValue, customerIds) {
+function automaticDiscountInput(functionId, configValue) {
   const sharedConfigValue = JSON.stringify({
     ...JSON.parse(configValue),
     functionId,
@@ -204,11 +204,6 @@ function automaticDiscountInput(functionId, configValue, customerIds) {
       orderDiscounts: false,
       productDiscounts: true,
       shippingDiscounts: false,
-    },
-    context: {
-      customers: {
-        add: customerIds,
-      },
     },
     metafields: [
       {
@@ -278,15 +273,7 @@ async function getDiscountFunctionId(admin) {
   );
 }
 
-async function createAutomaticDiscount(admin, functionId, configValue, eligibleCustomerIds = []) {
-  const customerIds = Array.from(
-    new Set(eligibleCustomerIds.map((value) => buildCustomerGid(value)).filter(Boolean)),
-  );
-
-  if (!customerIds.length) {
-    throw new Error("No eligible customer IDs were provided for the automatic discount.");
-  }
-
+async function createAutomaticDiscount(admin, functionId, configValue) {
   const data = await runAdminGraphql(
     admin,
     `#graphql
@@ -308,7 +295,7 @@ async function createAutomaticDiscount(admin, functionId, configValue, eligibleC
     `,
     {
       automaticAppDiscount: {
-        ...automaticDiscountInput(functionId, configValue, customerIds),
+        ...automaticDiscountInput(functionId, configValue),
         startsAt: new Date().toISOString(),
       },
     },
@@ -327,15 +314,7 @@ async function createAutomaticDiscount(admin, functionId, configValue, eligibleC
   return discountNodeId;
 }
 
-async function updateAutomaticDiscount(admin, discountNodeId, functionId, configValue, eligibleCustomerIds = []) {
-  const customerIds = Array.from(
-    new Set(eligibleCustomerIds.map((value) => buildCustomerGid(value)).filter(Boolean)),
-  );
-
-  if (!customerIds.length) {
-    throw new Error("No eligible customer IDs were provided for the automatic discount.");
-  }
-
+async function updateAutomaticDiscount(admin, discountNodeId, functionId, configValue) {
   const data = await runAdminGraphql(
     admin,
     `#graphql
@@ -357,7 +336,7 @@ async function updateAutomaticDiscount(admin, discountNodeId, functionId, config
     `,
     {
       id: discountNodeId,
-      automaticAppDiscount: automaticDiscountInput(functionId, configValue, customerIds),
+      automaticAppDiscount: automaticDiscountInput(functionId, configValue),
     },
   );
 
@@ -534,44 +513,6 @@ async function syncCodeDiscountCombinations(admin, functionId, automaticConfig) 
     updatedCodeDiscountNodeIds: updatedCodeDiscounts.map((discount) => discount.id),
     updatedCodeDiscounts,
   };
-}
-
-async function findEligibleCustomerIdsForRules(shop, rules) {
-  const normalizedShop = String(shop || "").trim().toLowerCase();
-  const activeInstituteLabels = Array.from(
-    new Set(
-      rules
-        .filter((rule) => rule.isActive !== false && Number(rule.percentage) > 0)
-        .map((rule) => String(rule.instituteLabel || "").trim())
-        .filter(Boolean),
-    ),
-  );
-
-  if (!normalizedShop || !activeInstituteLabels.length) {
-    return [];
-  }
-
-  const links = await prisma.portalUserCustomerLink.findMany({
-    where: {
-      shop: normalizedShop,
-      portalUser: {
-        institute: { in: activeInstituteLabels },
-      },
-    },
-    select: {
-      customerId: true,
-      customerGid: true,
-    },
-  });
-
-  return Array.from(
-    new Set(
-      links
-        .flatMap((link) => [link.customerGid, link.customerId])
-        .map((value) => buildCustomerGid(value))
-        .filter(Boolean),
-    ),
-  );
 }
 
 async function deleteAutomaticDiscount(admin, discountNodeId) {
@@ -783,7 +724,6 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
   const discountNodeIdsToDelete = new Set(
     [discountNodeId, ...fallbackDiscountNodeIds].map((value) => String(value || "").trim()).filter(Boolean),
   );
-  const eligibleCustomerIds = await findEligibleCustomerIdsForRules(shop, rules);
 
   if (!config.rules.length) {
     for (const nodeId of discountNodeIdsToDelete) {
@@ -808,29 +748,6 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
     };
   }
 
-  if (!eligibleCustomerIds.length) {
-    for (const nodeId of discountNodeIdsToDelete) {
-      try {
-        await deleteAutomaticDiscount(admin, nodeId);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        if (!/not found|invalid id|does not exist/i.test(message)) {
-          throw error;
-        }
-      }
-    }
-
-    await prisma.automaticDiscountConfig.upsert({
-      where: { shop },
-      update: { discountNodeId: "", functionId },
-      create: { shop, discountNodeId: "", functionId },
-    });
-
-    throw new Error(
-      "No eligible customers are linked to the active institutes yet. Sync portal users first, then retry.",
-    );
-  }
-
   try {
     const existingDiscountNodeIds = Array.from(discountNodeIdsToDelete);
     const nodeIdToUpdate = existingDiscountNodeIds[0] || "";
@@ -848,15 +765,15 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
     }
 
     discountNodeId = nodeIdToUpdate
-      ? await updateAutomaticDiscount(admin, nodeIdToUpdate, functionId, configValue, eligibleCustomerIds)
-      : await createAutomaticDiscount(admin, functionId, configValue, eligibleCustomerIds);
+      ? await updateAutomaticDiscount(admin, nodeIdToUpdate, functionId, configValue)
+      : await createAutomaticDiscount(admin, functionId, configValue);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (!discountNodeId || !/not found|invalid id|does not exist|has already been taken/i.test(message)) {
       throw error;
     }
 
-    discountNodeId = await createAutomaticDiscount(admin, functionId, configValue, eligibleCustomerIds);
+    discountNodeId = await createAutomaticDiscount(admin, functionId, configValue);
   }
 
   await prisma.automaticDiscountConfig.upsert({
