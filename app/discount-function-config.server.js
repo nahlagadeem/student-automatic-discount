@@ -746,17 +746,35 @@ export async function syncPortalUsersToCustomerTags({ admin, shop, rules }) {
   };
 }
 
-export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
+export async function syncAutomaticDiscountRules({ admin, shop, rules, forceRebuild = false }) {
   await ensureAutomaticDiscountConfigTable();
 
   const limitedTimeOffers = await buildLimitedTimeProductOffers(admin);
   const config = buildFunctionConfiguration(rules, { limitedTimeOffers });
   const configValue = JSON.stringify(config);
-  const existingConfig = await prisma.automaticDiscountConfig.findUnique({
+  let existingConfig = await prisma.automaticDiscountConfig.findUnique({
     where: { shop },
   });
 
   const functionId = await getDiscountFunctionId(admin);
+
+  if (forceRebuild) {
+    const nodeIdsToRebuild = await findAutomaticDiscountNodeIds(admin, functionId);
+    for (const nodeId of nodeIdsToRebuild) {
+      try {
+        await deleteAutomaticDiscount(admin, nodeId);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!/not found|invalid id|does not exist/i.test(message)) {
+          throw error;
+        }
+      }
+    }
+
+    await prisma.automaticDiscountConfig.deleteMany({ where: { shop } });
+    existingConfig = null;
+  }
+
   let discountNodeId = existingConfig?.discountNodeId || "";
   const fallbackDiscountNodeIds = await findAutomaticDiscountNodeIds(admin, functionId);
   const liveDiscountNodeIds = fallbackDiscountNodeIds
