@@ -590,7 +590,7 @@ async function findAutomaticDiscountNodeIds(admin, functionId) {
       }
     `,
     {
-      query: `method:automatic title:"${DISCOUNT_TITLE}"`,
+      query: "method:automatic",
     },
   );
 
