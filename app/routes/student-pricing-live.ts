@@ -288,7 +288,21 @@ async function getProductInfoMap(admin: GraphqlClient, handles: string[]) {
     return new Map<string, ProductInfo>();
   }
 
-  const query = normalizedHandles.map((handle) => `handle:${JSON.stringify(handle)}`).join(" OR ");
+  const map = new Map<string, ProductInfo>();
+  const offerHandle = normalizeHandle(LIMITED_TIME_PRODUCT_OFFER.productHandle || "");
+  if (offerHandle && normalizedHandles.includes(offerHandle)) {
+    map.set(offerHandle, {
+      id: LIMITED_TIME_PRODUCT_OFFER.productId,
+      collections: new Set([CATEGORY_COLLECTION_IDS.mac]),
+    });
+  }
+
+  const handlesToFetch = normalizedHandles.filter((handle) => handle !== offerHandle);
+  if (!handlesToFetch.length) {
+    return map;
+  }
+
+  const query = handlesToFetch.map((handle) => `handle:${JSON.stringify(handle)}`).join(" OR ");
   const data = await runAdminGraphql(
     admin,
     `#graphql
@@ -310,7 +324,6 @@ async function getProductInfoMap(admin: GraphqlClient, handles: string[]) {
     { query },
   );
 
-  const map = new Map<string, ProductInfo>();
   for (const product of (data?.products?.nodes ?? []) as ProductNode[]) {
     const handle = normalizeHandle(String(product?.handle || ""));
     if (!handle) continue;

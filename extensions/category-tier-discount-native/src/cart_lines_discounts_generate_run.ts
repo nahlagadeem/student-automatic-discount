@@ -262,8 +262,7 @@ export function cartLinesDiscountsGenerateRun(
   const offerConfig = readMacbookNeoOffer(automaticConfig || rawConfig);
   const isOfferActive =
     Boolean(input.shop.localTime.macbookNeoOfferActive) &&
-    Boolean(offerConfig) &&
-    buyerHasActiveInstituteRule(input, automaticConfig || rawConfig);
+    Boolean(offerConfig);
   const offerVariantIds = new Set(offerConfig?.variantIds ?? []);
   const productLinesByPercent: Record<number, {id: string; quantity: number}[]> =
     {};

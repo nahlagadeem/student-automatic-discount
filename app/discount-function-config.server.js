@@ -467,14 +467,12 @@ async function updateCodeDiscountCombination(admin, discountNode, automaticConfi
     },
   ];
 
-  if (discountNode.functionId === String(automaticConfig?.functionId || "")) {
-    metafields.push({
-      namespace: CONFIG_NAMESPACE,
-      key: CONFIG_KEY,
-      type: "json",
-      value: JSON.stringify(buildCodeDiscountExclusionConfig(discountNode.configValue, automaticConfig)),
-    });
-  }
+  metafields.push({
+    namespace: CONFIG_NAMESPACE,
+    key: CONFIG_KEY,
+    type: "json",
+    value: JSON.stringify(buildCodeDiscountExclusionConfig(discountNode.configValue, automaticConfig)),
+  });
 
   const data = await runAdminGraphql(
     admin,
@@ -524,7 +522,7 @@ async function syncCodeDiscountCombinations(admin, functionId, automaticConfig) 
     functionId,
   };
   const codeDiscountNodes = await findCodeDiscountNodeIds(admin);
-  const ownedCodeDiscountNodes = codeDiscountNodes.filter((node) => node.functionId === functionId);
+  const ownedCodeDiscountNodes = codeDiscountNodes.filter((node) => node.functionId === functionId || node.configValue);
   const updatedCodeDiscounts = [];
 
   for (const node of ownedCodeDiscountNodes) {
