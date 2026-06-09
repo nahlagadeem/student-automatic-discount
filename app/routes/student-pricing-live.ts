@@ -1,6 +1,6 @@
 import prisma from "../db.server";
 import { ensureAutomaticDiscountRuleTable } from "../automatic-discount-rules.server";
-import { CATEGORY_COLLECTION_IDS, getInstituteByEmail, getInstituteByLabel } from "../institutes";
+import { CATEGORY_COLLECTION_IDS, getInstituteByEmail, getInstituteByKey, getInstituteByLabel } from "../institutes";
 import { setCustomerPortalProfileMetafields } from "../customer-profile-metafields.server";
 import { linkPortalUserToCustomer } from "../portal-user-links.server";
 import { authenticate, unauthenticated } from "../shopify.server";
@@ -445,7 +445,7 @@ async function handle(request: Request) {
       },
     });
 
-    if (!rules.length) {
+    if (!rules.length && !getInstituteByKey(instituteKey)) {
       if (cleanupMode) {
         return json({
           ok: true,

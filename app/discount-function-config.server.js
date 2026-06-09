@@ -1,5 +1,5 @@
 import prisma from "./db.server";
-import { getInstituteByLabel } from "./institutes";
+import { INSTITUTES, getInstituteByLabel } from "./institutes";
 import { linkPortalUserToCustomer } from "./portal-user-links.server";
 import { setCustomerPortalProfileMetafields } from "./customer-profile-metafields.server";
 
@@ -61,6 +61,7 @@ export function buildFunctionConfiguration(rules, options = {}) {
   return {
     version: 2,
     rules: activeRules,
+    eligibleInstituteKeys: INSTITUTES.map((institute) => institute.key),
     limitedTimeOffers: Array.isArray(options.limitedTimeOffers) ? options.limitedTimeOffers : [],
     ipadPercentage: highestPercentageFor("ipad"),
     macPercentage: highestPercentageFor("mac"),
@@ -725,7 +726,7 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
     [discountNodeId, ...fallbackDiscountNodeIds].map((value) => String(value || "").trim()).filter(Boolean),
   );
 
-  if (!config.rules.length) {
+  if (!config.rules.length && !config.limitedTimeOffers.length) {
     for (const nodeId of discountNodeIdsToDelete) {
       try {
         await deleteAutomaticDiscount(admin, nodeId);

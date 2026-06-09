@@ -22,6 +22,7 @@ type RuleConfig = {
   codePercentage?: number;
   automaticConfig?: RuleConfig | null;
   codeConfig?: RuleConfig | null;
+  eligibleInstituteKeys?: string[];
   limitedTimeOffers?: LimitedTimeOfferConfig[];
   rules?: {
     instituteKey?: string;
@@ -123,10 +124,17 @@ function readRuleConfigFromConfig(input: CartInput, config: RuleConfig | null | 
 }
 
 function buyerHasActiveInstituteRule(input: CartInput, config: RuleConfig | null | undefined): boolean {
-  if (!Array.isArray(config?.rules)) return false;
-
   const buyerInstituteKey = getBuyerInstituteKeyFromTags(input);
   if (!buyerInstituteKey) return false;
+
+  if (Array.isArray(config?.eligibleInstituteKeys)) {
+    const listedInstituteKeys = config.eligibleInstituteKeys
+      .map((key) => String(key || "").trim())
+      .filter(Boolean);
+    if (listedInstituteKeys.includes(buyerInstituteKey)) return true;
+  }
+
+  if (!Array.isArray(config?.rules)) return false;
 
   return config.rules.some(
     (rule) =>
