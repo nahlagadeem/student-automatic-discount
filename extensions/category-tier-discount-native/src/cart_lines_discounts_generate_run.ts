@@ -223,6 +223,7 @@ export function cartLinesDiscountsGenerateRun(
   const rawConfig = readRawConfig(input);
   const isStudentCodeDiscount = rawConfig.mode === "student-code";
   const isCodeWithAutomaticExclusions = rawConfig.mode === "code-with-automatic-exclusions";
+  const isCodeDiscountTrigger = isStudentCodeDiscount || isCodeWithAutomaticExclusions;
   const codePercentage = clampPercentage(rawConfig.codePercentage, 0);
   const codeConfig = isCodeWithAutomaticExclusions && rawConfig.codeConfig ? rawConfig.codeConfig : rawConfig;
   const automaticConfig =
@@ -244,6 +245,8 @@ export function cartLinesDiscountsGenerateRun(
 
     const product = line.merchandise.product;
     if (isOfferActive && offerVariantIds.has(line.merchandise.id)) {
+      if (isCodeDiscountTrigger) continue;
+
       candidates.push({
         message: offerConfig?.label || "Limited time offer",
         targets: [
