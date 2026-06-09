@@ -12,6 +12,16 @@ const CUSTOMER_IDENTITY_NAMESPACE = "$app:student-discount";
 const CUSTOMER_INSTITUTE_KEY = "institute_key";
 const SHARED_CONFIG_NAMESPACE = "student-discount-shared";
 const SHARED_AUTOMATIC_CONFIG_KEY = "automatic-configuration";
+export const LIMITED_TIME_PRODUCT_OFFER = {
+  key: "macbook-neo-256gb-limited-offer",
+  productId: "gid://shopify/Product/9213557440730",
+  storageOptionValue: "256GB NO Touch ID",
+  discountAmount: 409,
+  targetPrice: 2390,
+  label: "Limited time offer",
+  startDateTime: "2026-06-09T00:00:00",
+  endDateTime: "2026-08-10T00:00:00",
+};
 
 export async function ensureAutomaticDiscountConfigTable() {
   await prisma.$executeRawUnsafe(`
@@ -31,7 +41,7 @@ export async function ensureAutomaticDiscountConfigTable() {
   `);
 }
 
-export function buildFunctionConfiguration(rules) {
+export function buildFunctionConfiguration(rules, options = {}) {
   const activeRules = rules
     .filter((rule) => rule.isActive !== false && Number(rule.percentage) > 0)
     .map((rule) => ({
@@ -51,6 +61,7 @@ export function buildFunctionConfiguration(rules) {
   return {
     version: 2,
     rules: activeRules,
+    limitedTimeOffers: Array.isArray(options.limitedTimeOffers) ? options.limitedTimeOffers : [],
     ipadPercentage: highestPercentageFor("ipad"),
     macPercentage: highestPercentageFor("mac"),
     accessoriesPercentage: highestPercentageFor("accessories"),
@@ -59,6 +70,61 @@ export function buildFunctionConfiguration(rules) {
     tvHomePercentage: highestPercentageFor("tv-home"),
     airpodsPercentage: highestPercentageFor("airpods"),
   };
+}
+
+async function buildLimitedTimeProductOffers(admin) {
+  const offer = LIMITED_TIME_PRODUCT_OFFER;
+  const data = await runAdminGraphql(
+    admin,
+    `#graphql
+      query GetLimitedTimeOfferProduct($id: ID!) {
+        product(id: $id) {
+          handle
+          variants(first: 100) {
+            nodes {
+              id
+              selectedOptions {
+                name
+                value
+              }
+            }
+          }
+        }
+      }
+    `,
+    {
+      id: offer.productId,
+    },
+  );
+
+  const variantIds = (data?.product?.variants?.nodes ?? [])
+    .filter((variant) =>
+      (variant?.selectedOptions ?? []).some(
+        (option) => String(option?.value || "").trim() === offer.storageOptionValue,
+      ),
+    )
+    .map((variant) => String(variant?.id || "").trim())
+    .filter(Boolean);
+
+  if (!variantIds.length) {
+    throw new Error(
+      `No ${offer.storageOptionValue} variants were found for ${offer.productId}.`,
+    );
+  }
+
+  return [
+    {
+      key: offer.key,
+      productId: offer.productId,
+      productHandle: String(data?.product?.handle || "").trim(),
+      variantIds,
+      discountAmount: offer.discountAmount,
+      targetPrice: offer.targetPrice,
+      label: offer.label,
+      startDateTime: offer.startDateTime,
+      endDateTime: offer.endDateTime,
+    },
+  ];
 }
 
 function parseGraphqlPayload(payloadText) {
@@ -704,7 +770,8 @@ export async function syncPortalUsersToCustomerTags({ admin, shop, rules }) {
 export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
   await ensureAutomaticDiscountConfigTable();
 
-  const config = buildFunctionConfiguration(rules);
+  const limitedTimeOffers = await buildLimitedTimeProductOffers(admin);
+  const config = buildFunctionConfiguration(rules, { limitedTimeOffers });
   const configValue = JSON.stringify(config);
   const existingConfig = await prisma.automaticDiscountConfig.findUnique({
     where: { shop },

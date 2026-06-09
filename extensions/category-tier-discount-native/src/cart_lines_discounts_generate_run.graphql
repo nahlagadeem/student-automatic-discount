@@ -1,4 +1,12 @@
 query CartInput {
+  shop {
+    localTime {
+      macbookNeoOfferActive: dateTimeBetween(
+        startDateTime: "2026-06-09T00:00:00"
+        endDateTime: "2026-08-10T00:00:00"
+      )
+    }
+  }
   cart {
     buyerIdentity {
       customer {
@@ -13,26 +21,20 @@ query CartInput {
       merchandise {
         __typename
         ... on ProductVariant {
+          id
           product {
-            ipad: inCollections(ids: ["gid://shopify/Collection/452991221978"]) {
-              isMember
-            }
-            mac: inCollections(ids: ["gid://shopify/Collection/452991746266"]) {
-              isMember
-            }
-            accessories: inCollections(ids: ["gid://shopify/Collection/453527797978"]) {
-              isMember
-            }
-            iphone: inCollections(ids: ["gid://shopify/Collection/452991123674"]) {
-              isMember
-            }
-            appleWatch: inCollections(ids: ["gid://shopify/Collection/52991287514"]) {
-              isMember
-            }
-            tvHome: inCollections(ids: ["gid://shopify/Collection/453560008922"]) {
-              isMember
-            }
-            airpods: inCollections(ids: ["gid://shopify/Collection/453560271066"]) {
+            collections: inCollections(
+              ids: [
+                "gid://shopify/Collection/452991221978"
+                "gid://shopify/Collection/452991746266"
+                "gid://shopify/Collection/453527797978"
+                "gid://shopify/Collection/452991123674"
+                "gid://shopify/Collection/52991287514"
+                "gid://shopify/Collection/453560008922"
+                "gid://shopify/Collection/453560271066"
+              ]
+            ) {
+              collectionId
               isMember
             }
           }

@@ -116,7 +116,16 @@
     return current;
   }
 
-  function buildPreview(priceElement, discountedText) {
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function buildPreview(priceElement, discountedText, labelText) {
     const existing = priceElement.parentElement && priceElement.parentElement.querySelector(".student-pricing-preview");
     if (existing) existing.remove();
 
@@ -125,9 +134,10 @@
     if (priceElement.tagName === "SPAN") {
       preview.classList.add("is-inline");
     }
+    const label = String(labelText || "Discounted price").trim() || "Discounted price";
     preview.innerHTML =
-      `<span class="student-pricing-preview__label">Discounted price</span>` +
-      `<span class="student-pricing-preview__price">${discountedText}</span>`;
+      `<span class="student-pricing-preview__label">${escapeHtml(label)}</span>` +
+      `<span class="student-pricing-preview__price">${escapeHtml(discountedText)}</span>`;
 
     priceElement.classList.add("student-pricing-original");
     priceElement.insertAdjacentElement("afterend", preview);
@@ -295,14 +305,22 @@
       for (const target of targets) {
         const pricing = payload.byHandle[target.handle];
         const percentage = Number(pricing && pricing.percentage);
-        if (!Number.isFinite(percentage) || percentage <= 0) continue;
+        const fixedDiscountedAmount = Number(pricing && pricing.discountedAmount);
+        const hasFixedDiscountedAmount = Number.isFinite(fixedDiscountedAmount) && fixedDiscountedAmount > 0;
+        if (!hasFixedDiscountedAmount && (!Number.isFinite(percentage) || percentage <= 0)) continue;
 
         for (const priceElement of target.priceElements) {
           const parsedMoney = parseMoney(getOriginalPriceText(priceElement));
           if (!parsedMoney || parsedMoney.amount <= 0) continue;
 
-          const discountedAmount = parsedMoney.amount * (1 - percentage / 100);
-          buildPreview(priceElement, formatMoney(parsedMoney, discountedAmount));
+          const discountedAmount = hasFixedDiscountedAmount
+            ? fixedDiscountedAmount
+            : parsedMoney.amount * (1 - percentage / 100);
+          buildPreview(
+            priceElement,
+            formatMoney(parsedMoney, discountedAmount),
+            pricing && pricing.label
+          );
         }
       }
     } finally {

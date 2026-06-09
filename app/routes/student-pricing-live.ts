@@ -4,6 +4,7 @@ import { CATEGORY_COLLECTION_IDS, getInstituteByEmail, getInstituteByLabel } fro
 import { setCustomerPortalProfileMetafields } from "../customer-profile-metafields.server";
 import { linkPortalUserToCustomer } from "../portal-user-links.server";
 import { authenticate, unauthenticated } from "../shopify.server";
+import { LIMITED_TIME_PRODUCT_OFFER } from "../discount-function-config.server";
 
 const JSON_HEADERS = {
   "Content-Type": "application/json; charset=utf-8",
@@ -18,11 +19,17 @@ type GraphqlClient = {
 };
 
 type ProductNode = {
+  id?: string | null;
   handle?: string | null;
   title?: string | null;
   collections?: {
     nodes?: { id?: string | null }[];
   } | null;
+};
+
+type ProductInfo = {
+  id: string;
+  collections: Set<string>;
 };
 
 type CustomerNode = {
@@ -268,10 +275,17 @@ function buildCustomerGid(rawCustomerId: string | null) {
   return `gid://shopify/Customer/${value}`;
 }
 
-async function getProductCollectionMap(admin: GraphqlClient, handles: string[]) {
+function isLimitedTimeProductOfferActive() {
+  const now = Date.now();
+  const start = Date.parse(`${LIMITED_TIME_PRODUCT_OFFER.startDateTime}+03:00`);
+  const end = Date.parse(`${LIMITED_TIME_PRODUCT_OFFER.endDateTime}+03:00`);
+  return Number.isFinite(start) && Number.isFinite(end) && now >= start && now < end;
+}
+
+async function getProductInfoMap(admin: GraphqlClient, handles: string[]) {
   const normalizedHandles = Array.from(new Set(handles.map(normalizeHandle).filter(Boolean))).slice(0, 40);
   if (!normalizedHandles.length) {
-    return new Map<string, Set<string>>();
+    return new Map<string, ProductInfo>();
   }
 
   const query = normalizedHandles.map((handle) => `handle:${JSON.stringify(handle)}`).join(" OR ");
@@ -281,6 +295,7 @@ async function getProductCollectionMap(admin: GraphqlClient, handles: string[]) 
       query GetProductsForStudentPricing($query: String!) {
         products(first: 40, query: $query) {
           nodes {
+            id
             handle
             title
             collections(first: 25) {
@@ -295,7 +310,7 @@ async function getProductCollectionMap(admin: GraphqlClient, handles: string[]) 
     { query },
   );
 
-  const map = new Map<string, Set<string>>();
+  const map = new Map<string, ProductInfo>();
   for (const product of (data?.products?.nodes ?? []) as ProductNode[]) {
     const handle = normalizeHandle(String(product?.handle || ""));
     if (!handle) continue;
@@ -304,7 +319,10 @@ async function getProductCollectionMap(admin: GraphqlClient, handles: string[]) 
         .map((collection) => String(collection?.id || "").trim())
         .filter(Boolean),
     );
-    map.set(handle, collections);
+    map.set(handle, {
+      id: String(product?.id || "").trim(),
+      collections,
+    });
   }
 
   return map;
@@ -452,13 +470,31 @@ async function handle(request: Request) {
       });
     }
 
-    const collectionsByHandle = await getProductCollectionMap(admin, handles);
+    const productInfoByHandle = await getProductInfoMap(admin, handles);
+    const limitedTimeOfferActive = isLimitedTimeProductOfferActive();
     const byHandle = Object.fromEntries(
       handles.map((handle) => {
+        const productInfo = productInfoByHandle.get(handle);
         const percentage = getMatchingCategoryPercentage(
-          collectionsByHandle.get(handle) ?? new Set<string>(),
+          productInfo?.collections ?? new Set<string>(),
           rules,
         );
+        const isLimitedTimeOffer =
+          limitedTimeOfferActive && productInfo?.id === LIMITED_TIME_PRODUCT_OFFER.productId;
+
+        if (isLimitedTimeOffer) {
+          return [
+            handle,
+            {
+              percentage,
+              eligible: true,
+              limitedTimeOffer: true,
+              label: LIMITED_TIME_PRODUCT_OFFER.label,
+              discountAmount: LIMITED_TIME_PRODUCT_OFFER.discountAmount,
+              discountedAmount: LIMITED_TIME_PRODUCT_OFFER.targetPrice,
+            },
+          ];
+        }
 
         return [
           handle,
