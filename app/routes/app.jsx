@@ -23,6 +23,7 @@ export default function App() {
       {authenticated ? (
         <s-app-nav>
           <s-link href="/app">Home</s-link>
+          <s-link href="/app/sync-discounts">Sync discounts</s-link>
           <s-link href="/app/additional">Additional page</s-link>
           <s-link href="/app/debug/portal-users">Portal user debug</s-link>
         </s-app-nav>
