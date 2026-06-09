@@ -67,7 +67,7 @@ async function fetchAutomaticDiscountNodeIds(admin) {
         }
       `,
       {
-        query: `method:automatic title:"${DISCOUNT_TITLE}"`,
+        query: "method:automatic",
         after,
       },
     );
