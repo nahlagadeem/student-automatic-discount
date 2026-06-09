@@ -759,8 +759,11 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
   const functionId = await getDiscountFunctionId(admin);
   let discountNodeId = existingConfig?.discountNodeId || "";
   const fallbackDiscountNodeIds = await findAutomaticDiscountNodeIds(admin, functionId);
+  const liveDiscountNodeIds = fallbackDiscountNodeIds
+    .map((value) => String(value || "").trim())
+    .filter(Boolean);
   const discountNodeIdsToDelete = new Set(
-    [discountNodeId, ...fallbackDiscountNodeIds].map((value) => String(value || "").trim()).filter(Boolean),
+    [...liveDiscountNodeIds].map((value) => String(value || "").trim()).filter(Boolean),
   );
 
   if (!config.rules.length && !config.limitedTimeOffers.length) {
@@ -820,7 +823,14 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
     create: { shop, discountNodeId, functionId },
   });
 
-  const codeSyncResult = await syncCodeDiscountCombinations(admin, functionId, config);
+  let codeSyncResult = {};
+  try {
+    codeSyncResult = await syncCodeDiscountCombinations(admin, functionId, config);
+  } catch (error) {
+    codeSyncResult = {
+      codeSyncWarning: syncErrorMessage(error),
+    };
+  }
 
   return {
     discountNodeId,
