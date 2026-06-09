@@ -742,7 +742,7 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
     where: { shop },
   });
 
-  const functionId = existingConfig?.functionId || (await getDiscountFunctionId(admin));
+  const functionId = await getDiscountFunctionId(admin);
   let discountNodeId = existingConfig?.discountNodeId || "";
   const fallbackDiscountNodeIds = await findAutomaticDiscountNodeIds(admin, functionId);
   const discountNodeIdsToDelete = new Set(
