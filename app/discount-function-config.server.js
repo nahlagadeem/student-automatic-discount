@@ -815,6 +815,9 @@ export async function syncAutomaticDiscountRules({ admin, shop, rules }) {
 }
 
 export function syncErrorMessage(error) {
+  if (error instanceof Response) {
+    return `HTTP response ${error.status} ${error.statusText || ""}`.trim();
+  }
   const message = error instanceof Error ? error.message : String(error);
   if (/function not found/i.test(message)) {
     return "Shopify discount function is not registered on the shop yet. Deploy the Shopify app again, then retry.";
