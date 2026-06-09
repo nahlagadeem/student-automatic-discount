@@ -31,6 +31,8 @@
   const LIMITED_OFFER_HANDLE = "iphone-17e";
   const LIMITED_OFFER_TITLE = "13-inch macbook neo";
   const LIMITED_OFFER_STORAGE = "256gb no touch id";
+  const LIMITED_OFFER_PRICE = 2390;
+  const LIMITED_OFFER_LABEL = "Limited time offer";
 
   let scanTimer = 0;
   let observer = null;
@@ -285,6 +287,36 @@
     const currentToken = ++requestToken;
     const config = getConfig();
     if (!(config instanceof HTMLElement)) return;
+
+    const targets = collectTargets();
+    const limitedOfferTargets = targets.filter((target) => target.handle === LIMITED_OFFER_HANDLE);
+    if (limitedOfferTargets.length) {
+      if (observer) {
+        observer.disconnect();
+      }
+
+      try {
+        for (const target of limitedOfferTargets) {
+          for (const priceElement of target.priceElements) {
+            const parsedMoney = parseMoney(getOriginalPriceText(priceElement));
+            if (!parsedMoney || parsedMoney.amount <= 0) continue;
+            buildPreview(
+              priceElement,
+              formatMoney(parsedMoney, LIMITED_OFFER_PRICE),
+              LIMITED_OFFER_LABEL
+            );
+          }
+        }
+      } finally {
+        if (observer) {
+          observer.observe(document.documentElement, {
+            childList: true,
+            subtree: true
+          });
+        }
+      }
+    }
+
     if (!config.dataset.customerId) return;
 
     let cleanupPayload = null;
@@ -304,7 +336,6 @@
       }
     }
 
-    const targets = collectTargets();
     if (!targets.length) return;
 
     const handles = Array.from(new Set(targets.map((target) => target.handle)));

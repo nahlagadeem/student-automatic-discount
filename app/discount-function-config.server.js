@@ -493,7 +493,6 @@ async function updateCodeDiscountCombination(admin, discountNode, automaticConfi
     {
       id: discountNode.id,
       codeAppDiscount: {
-        functionId: String(automaticConfig?.functionId || ""),
         combinesWith: {
           orderDiscounts: false,
           productDiscounts: true,
@@ -523,7 +522,7 @@ async function syncCodeDiscountCombinations(admin, functionId, automaticConfig) 
     functionId,
   };
   const codeDiscountNodes = await findCodeDiscountNodeIds(admin);
-  const ownedCodeDiscountNodes = codeDiscountNodes;
+  const ownedCodeDiscountNodes = codeDiscountNodes.filter((node) => node.functionId === functionId || node.configValue);
   const updatedCodeDiscounts = [];
 
   for (const node of ownedCodeDiscountNodes) {
