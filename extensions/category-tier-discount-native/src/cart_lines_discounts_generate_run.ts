@@ -213,6 +213,27 @@ function getLinePercentageFromConfig(
   );
 }
 
+function getMaxConfiguredPercentage(config: RuleConfig | null | undefined): number {
+  const rules = Array.isArray(config?.rules) ? config.rules : [];
+  const maxRulePercentage = rules.reduce(
+    (maxPercentage, rule) => Math.max(maxPercentage, clampPercentage(rule.percentage, 0)),
+    0,
+  );
+  const tierConfig = readTierConfigFromConfig(config);
+
+  return Math.max(
+    maxRulePercentage,
+    tierConfig.macPercentage,
+    tierConfig.ipadPercentage,
+    tierConfig.accessoriesPercentage,
+    tierConfig.iphonePercentage,
+    tierConfig.appleWatchPercentage,
+    tierConfig.tvHomePercentage,
+    tierConfig.airpodsPercentage,
+    0,
+  );
+}
+
 export function cartLinesDiscountsGenerateRun(
   input: CartInput,
 ): CartLinesDiscountsGenerateRunResult {
@@ -246,14 +267,19 @@ export function cartLinesDiscountsGenerateRun(
   const offerVariantIds = new Set(offerConfig?.variantIds ?? []);
   const productLinesByPercent: Record<number, {id: string; quantity: number}[]> =
     {};
+  const codeFallbackLines: {id: string; quantity: number}[] = [];
   const candidates: ProductDiscountCandidate[] = [];
+  let skippedOfferLineForCode = false;
 
   for (const line of input.cart.lines) {
     if (line.merchandise.__typename !== "ProductVariant") continue;
 
     const product = line.merchandise.product;
     if (isOfferActive && offerVariantIds.has(line.merchandise.id)) {
-      if (isCodeDiscountTrigger) continue;
+      if (isCodeDiscountTrigger) {
+        skippedOfferLineForCode = true;
+        continue;
+      }
 
       candidates.push({
         message: offerConfig?.label || "Limited time offer",
@@ -278,6 +304,10 @@ export function cartLinesDiscountsGenerateRun(
     const automaticPercentage = automaticConfig
       ? getLinePercentageFromConfig(input, product, automaticConfig)
       : 0;
+    if (isCodeDiscountTrigger && automaticPercentage <= 0) {
+      codeFallbackLines.push({id: line.id, quantity: line.quantity});
+    }
+
     const codeLinePercentage = isStudentCodeDiscount
       ? codePercentage
       : getLinePercentageFromConfig(input, product, codeConfig);
@@ -288,6 +318,21 @@ export function cartLinesDiscountsGenerateRun(
       productLinesByPercent[appliedPercentage] = [];
     }
     productLinesByPercent[appliedPercentage].push({id: line.id, quantity: line.quantity});
+  }
+
+  if (
+    isCodeDiscountTrigger &&
+    skippedOfferLineForCode &&
+    !Object.keys(productLinesByPercent).length &&
+    codeFallbackLines.length
+  ) {
+    const fallbackPercentage = isStudentCodeDiscount
+      ? codePercentage
+      : getMaxConfiguredPercentage(codeConfig);
+
+    if (fallbackPercentage > 0) {
+      productLinesByPercent[fallbackPercentage] = codeFallbackLines;
+    }
   }
 
   candidates.push(...Object.entries(productLinesByPercent).map(
