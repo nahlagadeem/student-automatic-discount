@@ -156,6 +156,15 @@
     priceElement.insertAdjacentElement("afterend", preview);
   }
 
+  function hasNativeLimitedOfferDisplay(priceElement) {
+    const root = priceElement.closest(CART_LINE_SELECTOR) || priceElement.parentElement;
+    const text = String((root && root.textContent) || "").toLowerCase();
+    return (
+      text.includes("limited time offer") ||
+      (text.includes("sale price") && text.includes("regular price"))
+    );
+  }
+
   async function clearCartDiscounts() {
     const root =
       (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) ||
@@ -298,6 +307,7 @@
       try {
         for (const target of limitedOfferTargets) {
           for (const priceElement of target.priceElements) {
+            if (hasNativeLimitedOfferDisplay(priceElement)) continue;
             const parsedMoney = parseMoney(getOriginalPriceText(priceElement));
             if (!parsedMoney || parsedMoney.amount <= 0) continue;
             buildPreview(
