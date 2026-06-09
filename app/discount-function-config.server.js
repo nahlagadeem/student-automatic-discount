@@ -522,7 +522,7 @@ async function syncCodeDiscountCombinations(admin, functionId, automaticConfig) 
     functionId,
   };
   const codeDiscountNodes = await findCodeDiscountNodeIds(admin);
-  const ownedCodeDiscountNodes = codeDiscountNodes.filter((node) => node.functionId === functionId || node.configValue);
+  const ownedCodeDiscountNodes = codeDiscountNodes;
   const updatedCodeDiscounts = [];
 
   for (const node of ownedCodeDiscountNodes) {
