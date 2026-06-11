@@ -4,6 +4,7 @@ import { ensureAutomaticDiscountRuleTable } from "../automatic-discount-rules.se
 import {
   ensureAutomaticDiscountConfigTable,
   syncAutomaticDiscountRules,
+  syncPortalUsersToCustomerTags,
   syncErrorMessage,
 } from "../discount-function-config.server";
 import { authenticate } from "../shopify.server";
@@ -26,11 +27,17 @@ export const loader = async ({ request }) => {
       rules,
       forceRebuild: true,
     });
+    const portalSyncResult = await syncPortalUsersToCustomerTags({
+      admin,
+      shop: session.shop,
+      rules,
+    });
 
     return {
       ok: true,
       shop: session.shop,
       syncResult,
+      portalSyncResult,
     };
   } catch (error) {
     return {

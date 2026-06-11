@@ -282,6 +282,15 @@ function isLimitedTimeProductOfferActive() {
   return Number.isFinite(start) && Number.isFinite(end) && now >= start && now < end;
 }
 
+function isEligibleForLimitedTimeOffer(instituteKey: string) {
+  const eligibleInstituteKeys = Array.isArray(LIMITED_TIME_PRODUCT_OFFER.eligibleInstituteKeys)
+    ? LIMITED_TIME_PRODUCT_OFFER.eligibleInstituteKeys.map((key) => String(key || "").trim()).filter(Boolean)
+    : [];
+
+  if (!eligibleInstituteKeys.length) return true;
+  return eligibleInstituteKeys.includes(String(instituteKey || "").trim());
+}
+
 async function getProductInfoMap(admin: GraphqlClient, handles: string[]) {
   const normalizedHandles = Array.from(new Set(handles.map(normalizeHandle).filter(Boolean))).slice(0, 40);
   if (!normalizedHandles.length) {
@@ -484,7 +493,8 @@ async function handle(request: Request) {
     }
 
     const productInfoByHandle = await getProductInfoMap(admin, handles);
-    const limitedTimeOfferActive = isLimitedTimeProductOfferActive();
+    const limitedTimeOfferActive =
+      isLimitedTimeProductOfferActive() && isEligibleForLimitedTimeOffer(instituteKey);
     const byHandle = Object.fromEntries(
       handles.map((handle) => {
         const productInfo = productInfoByHandle.get(handle);

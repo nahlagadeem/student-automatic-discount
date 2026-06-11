@@ -1,5 +1,5 @@
 import prisma from "./db.server";
-import { INSTITUTES, getInstituteByLabel } from "./institutes";
+import { INSTITUTES, getInstituteByKey, getInstituteByLabel } from "./institutes";
 import { linkPortalUserToCustomer } from "./portal-user-links.server";
 import { setCustomerPortalProfileMetafields } from "./customer-profile-metafields.server";
 
@@ -28,6 +28,7 @@ export const LIMITED_TIME_PRODUCT_OFFER = {
   label: "Limited time offer",
   startDateTime: "2026-06-09T00:00:00",
   endDateTime: "2026-08-10T00:00:00",
+  eligibleInstituteKeys: ["bisr"],
 };
 
 export async function ensureAutomaticDiscountConfigTable() {
@@ -94,6 +95,7 @@ async function buildLimitedTimeProductOffers(admin) {
         label: offer.label,
         startDateTime: offer.startDateTime,
         endDateTime: offer.endDateTime,
+        eligibleInstituteKeys: offer.eligibleInstituteKeys,
       },
     ];
   }
@@ -147,6 +149,7 @@ async function buildLimitedTimeProductOffers(admin) {
       label: offer.label,
       startDateTime: offer.startDateTime,
       endDateTime: offer.endDateTime,
+      eligibleInstituteKeys: offer.eligibleInstituteKeys,
     },
   ];
 }
@@ -682,12 +685,18 @@ async function setCustomerInstituteMetafield(admin, customerId, instituteKey) {
 }
 
 export async function syncPortalUsersToCustomerTags({ admin, shop, rules }) {
+  const limitedOfferInstituteLabels = (LIMITED_TIME_PRODUCT_OFFER.eligibleInstituteKeys ?? [])
+    .map((key) => getInstituteByKey(key)?.label)
+    .filter(Boolean);
   const activeInstituteLabels = Array.from(
     new Set(
-      rules
+      [
+        ...rules
         .filter((rule) => rule.isActive !== false && Number(rule.percentage) > 0)
         .map((rule) => String(rule.instituteLabel || "").trim())
         .filter(Boolean),
+        ...limitedOfferInstituteLabels,
+      ],
     ),
   );
 

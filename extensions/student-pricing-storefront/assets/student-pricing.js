@@ -31,8 +31,6 @@
   const LIMITED_OFFER_HANDLE = "iphone-17e";
   const LIMITED_OFFER_TITLE = "13-inch macbook neo";
   const LIMITED_OFFER_STORAGE = "256gb no touch id";
-  const LIMITED_OFFER_PRICE = 2390;
-  const LIMITED_OFFER_LABEL = "Limited time offer";
 
   let scanTimer = 0;
   let observer = null;
@@ -156,13 +154,12 @@
     priceElement.insertAdjacentElement("afterend", preview);
   }
 
-  function hasNativeLimitedOfferDisplay(priceElement) {
-    const root = priceElement.closest(CART_LINE_SELECTOR) || priceElement.parentElement;
-    const text = String((root && root.textContent) || "").toLowerCase();
-    return (
-      text.includes("limited time offer") ||
-      (text.includes("sale price") && text.includes("regular price"))
-    );
+  function removePreview(priceElement) {
+    const next = priceElement.nextElementSibling;
+    if (next && next.classList && next.classList.contains("student-pricing-preview")) {
+      next.remove();
+    }
+    priceElement.classList.remove("student-pricing-original");
   }
 
   function isLimitedOfferOriginalPrice(parsedMoney) {
@@ -302,39 +299,6 @@
     if (!(config instanceof HTMLElement)) return;
 
     const targets = collectTargets();
-    const limitedOfferTargets = targets.filter((target) => target.handle === LIMITED_OFFER_HANDLE);
-    if (limitedOfferTargets.length) {
-      if (observer) {
-        observer.disconnect();
-      }
-
-      try {
-        for (const target of limitedOfferTargets) {
-          let appliedProductPagePreview = false;
-          for (const priceElement of target.priceElements) {
-            if (hasNativeLimitedOfferDisplay(priceElement)) continue;
-            const parsedMoney = parseMoney(getOriginalPriceText(priceElement));
-            if (!parsedMoney || parsedMoney.amount <= 0) continue;
-            if (!isLimitedOfferOriginalPrice(parsedMoney)) continue;
-            if (target.key.indexOf("::product-page") > -1 && appliedProductPagePreview) continue;
-            buildPreview(
-              priceElement,
-              formatMoney(parsedMoney, LIMITED_OFFER_PRICE),
-              LIMITED_OFFER_LABEL
-            );
-            appliedProductPagePreview = true;
-          }
-        }
-      } finally {
-        if (observer) {
-          observer.observe(document.documentElement, {
-            childList: true,
-            subtree: true
-          });
-        }
-      }
-    }
-
     if (!config.dataset.customerId) return;
 
     let cleanupPayload = null;
@@ -386,7 +350,12 @@
         const percentage = Number(pricing && pricing.percentage);
         const fixedDiscountedAmount = Number(pricing && pricing.discountedAmount);
         const hasFixedDiscountedAmount = Number.isFinite(fixedDiscountedAmount) && fixedDiscountedAmount > 0;
-        if (!hasFixedDiscountedAmount && (!Number.isFinite(percentage) || percentage <= 0)) continue;
+        if (!hasFixedDiscountedAmount && (!Number.isFinite(percentage) || percentage <= 0)) {
+          for (const priceElement of target.priceElements) {
+            removePreview(priceElement);
+          }
+          continue;
+        }
 
         for (const priceElement of target.priceElements) {
           const parsedMoney = parseMoney(getOriginalPriceText(priceElement));

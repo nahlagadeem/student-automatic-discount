@@ -41,6 +41,7 @@ type LimitedTimeOfferConfig = {
   label?: string;
   startDateTime?: string;
   endDateTime?: string;
+  eligibleInstituteKeys?: string[];
 };
 
 type MatchedRule = {
@@ -166,6 +167,17 @@ function readMacbookNeoOffer(config: RuleConfig | null | undefined): LimitedTime
   };
 }
 
+function buyerCanUseLimitedTimeOffer(input: CartInput, offer: LimitedTimeOfferConfig | null): boolean {
+  if (!offer) return false;
+  const eligibleInstituteKeys = Array.isArray(offer.eligibleInstituteKeys)
+    ? offer.eligibleInstituteKeys.map((key) => String(key || "").trim()).filter(Boolean)
+    : [];
+
+  if (!eligibleInstituteKeys.length) return true;
+  const buyerInstituteKey = getBuyerInstituteKeyFromTags(input);
+  return Boolean(buyerInstituteKey && eligibleInstituteKeys.includes(buyerInstituteKey));
+}
+
 function isProductInCategory(product: ProductLineProduct, categoryKey: string): boolean {
   const collectionId = CATEGORY_COLLECTION_IDS[categoryKey];
   if (!collectionId) return false;
@@ -260,7 +272,7 @@ export function cartLinesDiscountsGenerateRun(
       ? rawConfig.automaticConfig
       : null;
   const offerConfig = readMacbookNeoOffer(automaticConfig || rawConfig);
-  const isOfferActive = Boolean(offerConfig);
+  const isOfferActive = buyerCanUseLimitedTimeOffer(input, offerConfig);
   const offerVariantIds = new Set(offerConfig?.variantIds ?? []);
   const productLinesByPercent: Record<number, {id: string; quantity: number}[]> =
     {};
