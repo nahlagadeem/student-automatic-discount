@@ -165,6 +165,10 @@
     );
   }
 
+  function isLimitedOfferOriginalPrice(parsedMoney) {
+    return parsedMoney && Math.abs(Number(parsedMoney.amount) - 2799) < 0.01;
+  }
+
   async function clearCartDiscounts() {
     const root =
       (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) ||
@@ -306,15 +310,19 @@
 
       try {
         for (const target of limitedOfferTargets) {
+          let appliedProductPagePreview = false;
           for (const priceElement of target.priceElements) {
             if (hasNativeLimitedOfferDisplay(priceElement)) continue;
             const parsedMoney = parseMoney(getOriginalPriceText(priceElement));
             if (!parsedMoney || parsedMoney.amount <= 0) continue;
+            if (!isLimitedOfferOriginalPrice(parsedMoney)) continue;
+            if (target.key.indexOf("::product-page") > -1 && appliedProductPagePreview) continue;
             buildPreview(
               priceElement,
               formatMoney(parsedMoney, LIMITED_OFFER_PRICE),
               LIMITED_OFFER_LABEL
             );
+            appliedProductPagePreview = true;
           }
         }
       } finally {
@@ -383,6 +391,7 @@
         for (const priceElement of target.priceElements) {
           const parsedMoney = parseMoney(getOriginalPriceText(priceElement));
           if (!parsedMoney || parsedMoney.amount <= 0) continue;
+          if (target.handle === LIMITED_OFFER_HANDLE && !isLimitedOfferOriginalPrice(parsedMoney)) continue;
 
           const discountedAmount = hasFixedDiscountedAmount
             ? fixedDiscountedAmount
