@@ -3238,7 +3238,9 @@ export type DeliveryInputVariables = Exact<{ [key: string]: never; }>;
 
 export type DeliveryInput = { __typename?: 'Input', cart: { __typename?: 'Cart', deliveryGroups: Array<{ __typename?: 'CartDeliveryGroup', id: string }> }, discount: { __typename?: 'Discount', discountClasses: Array<DiscountClass> } };
 
-export type CartInputVariables = Exact<{ [key: string]: never; }>;
+export type CartInputVariables = Exact<{
+  collectionIds?: InputMaybe<Array<Scalars['ID']['input']> | Scalars['ID']['input']>;
+}>;
 
 
 export type CartInput = { __typename?: 'Input', shop: { __typename?: 'Shop', localTime: { __typename?: 'LocalTime', macbookNeoOfferActive: boolean } }, cart: { __typename?: 'Cart', buyerIdentity?: { __typename?: 'BuyerIdentity', customer?: { __typename?: 'Customer', metafield?: { __typename?: 'Metafield', value: string } | null } | null } | null, lines: Array<{ __typename?: 'CartLine', id: string, quantity: number, merchandise: { __typename: 'CustomProduct' } | { __typename: 'ProductVariant', id: string, product: { __typename?: 'Product', collections: Array<{ __typename?: 'CollectionMembership', collectionId: string, isMember: boolean }> } } }> }, discount: { __typename?: 'Discount', discountClasses: Array<DiscountClass>, metafield?: { __typename?: 'Metafield', value: string } | null } };

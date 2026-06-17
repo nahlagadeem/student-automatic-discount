@@ -1,4 +1,14 @@
-query CartInput {
+query CartInput(
+  $collectionIds: [ID!] = [
+    "gid://shopify/Collection/452991221978"
+    "gid://shopify/Collection/452991746266"
+    "gid://shopify/Collection/453527797978"
+    "gid://shopify/Collection/452991123674"
+    "gid://shopify/Collection/52991287514"
+    "gid://shopify/Collection/453560008922"
+    "gid://shopify/Collection/453560271066"
+  ]
+) {
   shop {
     localTime {
       macbookNeoOfferActive: dateTimeBetween(
@@ -23,17 +33,7 @@ query CartInput {
         ... on ProductVariant {
           id
           product {
-            collections: inCollections(
-              ids: [
-                "gid://shopify/Collection/452991221978"
-                "gid://shopify/Collection/452991746266"
-                "gid://shopify/Collection/453527797978"
-                "gid://shopify/Collection/452991123674"
-                "gid://shopify/Collection/52991287514"
-                "gid://shopify/Collection/453560008922"
-                "gid://shopify/Collection/453560271066"
-              ]
-            ) {
+            collections: inCollections(ids: $collectionIds) {
               collectionId
               isMember
             }

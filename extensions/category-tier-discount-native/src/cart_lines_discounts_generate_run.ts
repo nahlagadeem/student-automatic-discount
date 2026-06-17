@@ -16,7 +16,7 @@ type TierConfig = {
   airpodsPercentage: number;
 };
 
-type RuleConfig = {
+type RuleConfig = Partial<TierConfig> & {
   version?: number;
   mode?: string;
   codePercentage?: number;
@@ -30,8 +30,10 @@ type RuleConfig = {
     emailDomain?: string;
     categoryKey?: string;
     categoryLabel?: string;
+    collectionId?: string;
     percentage?: number;
   }[];
+  collectionIds?: string[];
 };
 
 type LimitedTimeOfferConfig = {
@@ -46,6 +48,7 @@ type LimitedTimeOfferConfig = {
 
 type MatchedRule = {
   categoryKey: string;
+  collectionId: string;
   percentage: number;
 };
 
@@ -119,29 +122,10 @@ function readRuleConfigFromConfig(input: CartInput, config: RuleConfig | null | 
     .filter((rule) => String(rule.instituteKey || "").trim() === buyerInstituteKey)
     .map((rule) => ({
       categoryKey: String(rule.categoryKey || "").trim(),
+      collectionId: String(rule.collectionId || "").trim(),
       percentage: clampPercentage(rule.percentage, 0),
     }))
-    .filter((rule) => rule.categoryKey && rule.percentage > 0);
-}
-
-function buyerHasActiveInstituteRule(input: CartInput, config: RuleConfig | null | undefined): boolean {
-  const buyerInstituteKey = getBuyerInstituteKeyFromTags(input);
-  if (!buyerInstituteKey) return false;
-
-  if (Array.isArray(config?.eligibleInstituteKeys)) {
-    const listedInstituteKeys = config.eligibleInstituteKeys
-      .map((key) => String(key || "").trim())
-      .filter(Boolean);
-    if (listedInstituteKeys.includes(buyerInstituteKey)) return true;
-  }
-
-  if (!Array.isArray(config?.rules)) return false;
-
-  return config.rules.some(
-    (rule) =>
-      String(rule.instituteKey || "").trim() === buyerInstituteKey &&
-      clampPercentage(rule.percentage, 0) > 0,
-  );
+    .filter((rule) => (rule.categoryKey || rule.collectionId) && rule.percentage > 0);
 }
 
 function readMacbookNeoOffer(config: RuleConfig | null | undefined): LimitedTimeOfferConfig | null {
@@ -178,8 +162,7 @@ function buyerCanUseLimitedTimeOffer(input: CartInput, offer: LimitedTimeOfferCo
   return Boolean(buyerInstituteKey && eligibleInstituteKeys.includes(buyerInstituteKey));
 }
 
-function isProductInCategory(product: ProductLineProduct, categoryKey: string): boolean {
-  const collectionId = CATEGORY_COLLECTION_IDS[categoryKey];
+function isProductInCollection(product: ProductLineProduct, collectionId: string): boolean {
   if (!collectionId) return false;
 
   return product.collections.some(
@@ -187,12 +170,22 @@ function isProductInCategory(product: ProductLineProduct, categoryKey: string): 
   );
 }
 
+function isProductInCategory(product: ProductLineProduct, categoryKey: string): boolean {
+  if (categoryKey.startsWith("gid://shopify/Collection/")) {
+    return isProductInCollection(product, categoryKey);
+  }
+
+  return isProductInCollection(product, CATEGORY_COLLECTION_IDS[categoryKey]);
+}
+
 function getLinePercentageFromRules(product: ProductLineProduct, rules: MatchedRule[]): number {
   if (!rules.length) return 0;
 
   let maxPercentage = 0;
   for (const rule of rules) {
-    const isMatch = isProductInCategory(product, rule.categoryKey);
+    const isMatch =
+      isProductInCollection(product, rule.collectionId) ||
+      isProductInCategory(product, rule.categoryKey);
 
     if (isMatch) {
       maxPercentage = Math.max(maxPercentage, rule.percentage);

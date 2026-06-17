@@ -1,5 +1,5 @@
 import prisma from "./db.server";
-import { INSTITUTES, getInstituteByKey, getInstituteByLabel } from "./institutes";
+import { CATEGORY_COLLECTION_IDS, INSTITUTES, getInstituteByKey, getInstituteByLabel } from "./institutes";
 import { linkPortalUserToCustomer } from "./portal-user-links.server";
 import { setCustomerPortalProfileMetafields } from "./customer-profile-metafields.server";
 
@@ -58,6 +58,7 @@ export function buildFunctionConfiguration(rules, options = {}) {
       emailDomain: String(rule.emailDomain || "").trim().toLowerCase(),
       categoryKey: rule.categoryKey,
       categoryLabel: rule.categoryLabel,
+      collectionId: resolveRuleCollectionId(rule),
       percentage: Number(rule.percentage),
     }));
 
@@ -69,6 +70,9 @@ export function buildFunctionConfiguration(rules, options = {}) {
   return {
     version: 2,
     rules: activeRules,
+    collectionIds: Array.from(
+      new Set(activeRules.map((rule) => rule.collectionId).filter(Boolean)),
+    ),
     eligibleInstituteKeys: INSTITUTES.map((institute) => institute.key),
     limitedTimeOffers: Array.isArray(options.limitedTimeOffers) ? options.limitedTimeOffers : [],
     ipadPercentage: highestPercentageFor("ipad"),
@@ -79,6 +83,12 @@ export function buildFunctionConfiguration(rules, options = {}) {
     tvHomePercentage: highestPercentageFor("tv-home"),
     airpodsPercentage: highestPercentageFor("airpods"),
   };
+}
+
+function resolveRuleCollectionId(rule) {
+  const categoryKey = String(rule?.categoryKey || "").trim();
+  if (categoryKey.startsWith("gid://shopify/Collection/")) return categoryKey;
+  return CATEGORY_COLLECTION_IDS[categoryKey] || "";
 }
 
 async function buildLimitedTimeProductOffers(admin) {

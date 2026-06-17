@@ -357,7 +357,10 @@ function getMatchingCategoryPercentage(
   let maxPercentage = 0;
 
   for (const rule of rules) {
-    const collectionId = CATEGORY_COLLECTION_IDS[rule.categoryKey as keyof typeof CATEGORY_COLLECTION_IDS];
+    const categoryKey = String(rule.categoryKey || "").trim();
+    const collectionId = categoryKey.startsWith("gid://shopify/Collection/")
+      ? categoryKey
+      : CATEGORY_COLLECTION_IDS[categoryKey as keyof typeof CATEGORY_COLLECTION_IDS];
     if (!collectionId) continue;
     if (productCollectionIds.has(collectionId)) {
       maxPercentage = Math.max(maxPercentage, Number(rule.percentage) || 0);

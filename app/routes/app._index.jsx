@@ -56,8 +56,82 @@ function summarizeActionResult(data) {
 
 const INSTITUTE_OPTIONS = buildInstituteOptions();
 
+async function runGraphql(admin, query, variables = {}) {
+  const response = await admin.graphql(query, { variables });
+  const json = await response.json();
+  return { response, json };
+}
+
+async function fetchCollections(admin) {
+  const query = `#graphql
+    query Collections($cursor: String) {
+      collections(first: 250, after: $cursor, sortKey: TITLE) {
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+        nodes {
+          id
+          title
+          handle
+        }
+      }
+    }
+  `;
+
+  const collections = [];
+  let cursor = null;
+
+  do {
+    const result = await runGraphql(admin, query, { cursor });
+    if (!result.response.ok || result.json?.errors?.length) break;
+
+    const connection = result.json?.data?.collections;
+    collections.push(
+      ...(connection?.nodes ?? []).map((collection) => ({
+        key: String(collection?.id || "").trim(),
+        label: String(collection?.title || "").trim(),
+        handle: String(collection?.handle || "").trim(),
+        collectionId: String(collection?.id || "").trim(),
+      })),
+    );
+    cursor = connection?.pageInfo?.hasNextPage ? connection.pageInfo.endCursor : null;
+  } while (cursor);
+
+  return collections.filter((collection) => collection.key && collection.label);
+}
+
+function getSubmittedCategory(categoryKey, categoryLabel) {
+  const legacyCategory = getCategoryByKey(categoryKey);
+  if (legacyCategory) return legacyCategory;
+
+  const normalizedKey = String(categoryKey || "").trim();
+  const normalizedLabel = String(categoryLabel || "").trim();
+  if (normalizedKey.startsWith("gid://shopify/Collection/") && normalizedLabel) {
+    return {
+      key: normalizedKey,
+      label: normalizedLabel,
+      collectionId: normalizedKey,
+    };
+  }
+
+  return null;
+}
+
+function mergeCategoriesForExistingRules(collections, rules) {
+  if (!collections.length) return PRODUCT_CATEGORIES;
+
+  const collectionKeys = new Set(collections.map((collection) => collection.key));
+  const legacyCategoriesByKey = new Map(PRODUCT_CATEGORIES.map((category) => [category.key, category]));
+  const legacyCategoriesInUse = rules
+    .map((rule) => legacyCategoriesByKey.get(String(rule.categoryKey || "").trim()))
+    .filter((category) => category && !collectionKeys.has(category.key));
+
+  return [...collections, ...legacyCategoriesInUse];
+}
+
 export const loader = async ({ request }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   await ensureAutomaticDiscountRuleTable();
   await ensureAutomaticDiscountConfigTable();
 
@@ -66,10 +140,12 @@ export const loader = async ({ request }) => {
     orderBy: [{ instituteLabel: "asc" }, { categoryLabel: "asc" }],
   });
 
+  const collections = await fetchCollections(admin);
+
   return {
     shop: session.shop,
     instituteOptions: INSTITUTE_OPTIONS,
-    categories: PRODUCT_CATEGORIES,
+    categories: mergeCategoriesForExistingRules(collections, rules),
     rules,
   };
 };
@@ -114,10 +190,11 @@ export const action = async ({ request }) => {
 
   const instituteKey = String(formData.get("instituteKey") || "").trim();
   const categoryKey = String(formData.get("categoryKey") || "").trim();
+  const categoryLabel = String(formData.get("categoryLabel") || "").trim();
   const percentage = clampPercentage(formData.get("percentage"));
 
   const institute = getInstituteByKey(instituteKey);
-  const category = getCategoryByKey(categoryKey);
+  const category = getSubmittedCategory(categoryKey, categoryLabel);
 
   if (!institute) {
     return { ok: false, error: "Please choose an institute." };
@@ -209,6 +286,10 @@ export default function Index() {
   }, [fetcher.data, shopify]);
 
   const selectedInstitute = useMemo(() => getInstituteByKey(instituteKey), [instituteKey]);
+  const selectedCategory = useMemo(
+    () => categories.find((category) => category.key === categoryKey) || null,
+    [categories, categoryKey],
+  );
   const actionSummary = useMemo(() => summarizeActionResult(fetcher.data), [fetcher.data]);
 
   const submitRule = () => {
@@ -217,6 +298,7 @@ export default function Index() {
     if (editingRuleId) form.set("ruleId", editingRuleId);
     form.set("instituteKey", instituteKey);
     form.set("categoryKey", categoryKey);
+    form.set("categoryLabel", selectedCategory?.label || "");
     form.set("percentage", percentage);
     fetcher.submit(form, { method: "POST" });
   };

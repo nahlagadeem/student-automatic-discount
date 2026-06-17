@@ -20,3 +20,7 @@ description = "t:description"
   [extensions.build]
   command = ""
   path = "dist/function.wasm"
+
+  [extensions.input.variables]
+  namespace = "$app:category-tier-discount-native"
+  key = "function-configuration"
