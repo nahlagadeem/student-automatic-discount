@@ -1,13 +1,12 @@
-{% if customer %}
-  <div
-    id="student-pricing-config-{{ block.id }}"
-    class="student-pricing-config"
-    hidden
-    data-endpoint="/apps/student-automatic-discount/proxy/student-pricing"
-    data-shop="{{ shop.myshopify_domain }}"
-    data-customer-id="{{ customer.id }}"
-  ></div>
-{% endif %}
+<div
+  id="student-pricing-config-{{ block.id }}"
+  class="student-pricing-config"
+  hidden
+  data-endpoint="/apps/student-automatic-discount/proxy/student-pricing"
+  data-bundle-access-endpoint="/apps/student-automatic-discount/proxy/bundle-access"
+  data-shop="{{ shop.myshopify_domain }}"
+  data-customer-id="{{ customer.id | default: '' }}"
+></div>
 
 {% schema %}
 {

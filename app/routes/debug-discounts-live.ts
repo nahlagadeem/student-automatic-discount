@@ -19,7 +19,11 @@ function parseGraphqlPayload(payloadText: string) {
   }
 }
 
-async function runAdminGraphql(admin: { graphql: Function }, query: string, variables?: Record<string, unknown>) {
+async function runAdminGraphql(
+  admin: { graphql: (query: string, opts?: { variables?: Record<string, unknown> }) => Promise<Response> },
+  query: string,
+  variables?: Record<string, unknown>,
+) {
   const response = await admin.graphql(query, { variables });
   const payloadText = await response.text();
   const payload = parseGraphqlPayload(payloadText);

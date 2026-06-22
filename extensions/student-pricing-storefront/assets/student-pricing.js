@@ -31,6 +31,7 @@
   const LIMITED_OFFER_HANDLE = "iphone-17e";
   const LIMITED_OFFER_TITLE = "13-inch macbook neo";
   const LIMITED_OFFER_STORAGE = "256gb no touch id";
+  const PROTECTED_COLLECTION_HANDLES = new Set(["bundle", "all-bundles"]);
 
   let scanTimer = 0;
   let observer = null;
@@ -58,8 +59,87 @@
     return match ? decodeURIComponent(match[1]).trim().toLowerCase() : "";
   }
 
+  function extractCollectionHandleFromPath(pathname) {
+    const match = String(pathname || "").match(/\/collections\/([^/?#]+)/i);
+    return match ? decodeURIComponent(match[1]).trim().toLowerCase() : "";
+  }
+
+  function getCustomerId(config) {
+    return String((config && config.dataset && config.dataset.customerId) || "").trim();
+  }
+
+  function getProtectedCollectionHandle() {
+    const handle = extractCollectionHandleFromPath(window.location.pathname);
+    if (!handle) return "";
+    return PROTECTED_COLLECTION_HANDLES.has(handle) ? handle : "";
+  }
+
+  function redirectTo(url) {
+    if (!url) return;
+    if (window.location.href === url) return;
+    window.location.replace(url);
+  }
+
+  function buildReturnUrl() {
+    const url = new URL(window.location.href);
+    return `${url.pathname}${url.search}${url.hash}`;
+  }
+
+  function hidePageContent(message) {
+    const target = document.querySelector("main") || document.querySelector("#MainContent") || document.body;
+    if (!(target instanceof HTMLElement)) return;
+
+    target.style.visibility = "hidden";
+    target.style.pointerEvents = "none";
+
+    let overlay = document.querySelector(".student-pricing-bundle-guard");
+    if (!(overlay instanceof HTMLElement)) {
+      overlay = document.createElement("div");
+      overlay.className = "student-pricing-bundle-guard";
+      overlay.style.position = "fixed";
+      overlay.style.inset = "0";
+      overlay.style.zIndex = "99999";
+      overlay.style.display = "flex";
+      overlay.style.alignItems = "center";
+      overlay.style.justifyContent = "center";
+      overlay.style.padding = "24px";
+      overlay.style.background = "rgba(255,255,255,0.98)";
+      overlay.style.color = "#111";
+      overlay.style.textAlign = "center";
+      overlay.style.fontFamily = "inherit";
+      document.body.appendChild(overlay);
+    }
+
+    overlay.innerHTML =
+      `<div style="max-width: 560px; margin: 0 auto;">` +
+      `<h1 style="margin: 0 0 12px; font-size: 1.6rem; line-height: 1.25;">${escapeHtml(message)}</h1>` +
+      `</div>`;
+  }
+
   function isIgnoredPriceElement(candidate) {
     return candidate.closest(".student-pricing-preview") || candidate.classList.contains("student-pricing-preview");
+  }
+
+  async function fetchCollectionAccess(config, collectionHandle) {
+    const endpoint =
+      config.dataset.bundleAccessEndpoint || "/apps/student-automatic-discount/proxy/bundle-access";
+    const url = new URL(endpoint, window.location.origin);
+    url.searchParams.set("shop", getShopDomain(config));
+    url.searchParams.set("logged_in_customer_id", getCustomerId(config));
+    url.searchParams.set("collection_handle", collectionHandle);
+
+    const response = await fetch(url.toString(), {
+      credentials: "same-origin",
+      headers: { Accept: "application/json" }
+    });
+
+    if (!response.ok) {
+      const bodyText = await response.text().catch(() => "");
+      const summary = bodyText.length > 240 ? `${bodyText.slice(0, 240)}...` : bodyText;
+      throw new Error(`Bundle access request failed with ${response.status}: ${summary}`);
+    }
+
+    return response.json();
   }
 
   function findVisiblePriceElements(root) {
@@ -299,7 +379,32 @@
     if (!(config instanceof HTMLElement)) return;
 
     const targets = collectTargets();
-    if (!config.dataset.customerId) return;
+    const protectedCollectionHandle = getProtectedCollectionHandle();
+    if (protectedCollectionHandle) {
+      try {
+        const access = await fetchCollectionAccess(config, protectedCollectionHandle);
+        if (currentToken !== requestToken) return;
+
+        if (!access || !access.ok || !access.allowed) {
+          hidePageContent(access?.reason === "no_customer"
+            ? "Please sign in with your BISR account to view this collection."
+            : "This collection is only available to BISR customers.");
+
+          const returnUrl = encodeURIComponent(buildReturnUrl());
+          const customerId = getCustomerId(config);
+          if (!customerId && window.location.pathname !== "/account/login") {
+            redirectTo(`/account/login?return_url=${returnUrl}`);
+          } else {
+            redirectTo("/");
+          }
+          return;
+        }
+      } catch (error) {
+        console.warn("[student-pricing] failed to verify bundle collection access", error);
+      }
+    }
+
+    if (!getCustomerId(config)) return;
 
     let cleanupPayload = null;
     try {
