@@ -1,7 +1,6 @@
 {% assign request_path = request.path | downcase %}
-{% assign is_bisr_bundle_path = request_path contains '/products/primary-years-bundle' or request_path contains '/collections/all-bundles' or request_path contains '/collections/bundle' %}
 
-{% if is_bisr_bundle_path %}
+{% if request_path contains '/products/primary-years-bundle' or request_path contains '/collections/all-bundles' or request_path contains '/collections/bundle' %}
   <style>
     html.student-pricing-pending body {
       visibility: hidden !important;
