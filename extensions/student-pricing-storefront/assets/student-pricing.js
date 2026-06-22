@@ -32,6 +32,7 @@
   const LIMITED_OFFER_TITLE = "13-inch macbook neo";
   const LIMITED_OFFER_STORAGE = "256gb no touch id";
   const PROTECTED_COLLECTION_HANDLES = new Set(["bundle", "all-bundles"]);
+  const PROTECTED_PRODUCT_HANDLES = new Set(["primary-years-bundle"]);
 
   let scanTimer = 0;
   let observer = null;
@@ -72,6 +73,12 @@
     const handle = extractCollectionHandleFromPath(window.location.pathname);
     if (!handle) return "";
     return PROTECTED_COLLECTION_HANDLES.has(handle) ? handle : "";
+  }
+
+  function getProtectedProductHandle() {
+    const handle = extractHandleFromPath(window.location.pathname);
+    if (!handle) return "";
+    return PROTECTED_PRODUCT_HANDLES.has(handle) ? handle : "";
   }
 
   function redirectTo(url) {
@@ -120,13 +127,17 @@
     return candidate.closest(".student-pricing-preview") || candidate.classList.contains("student-pricing-preview");
   }
 
-  async function fetchCollectionAccess(config, collectionHandle) {
+  async function fetchCollectionAccess(config, collectionHandle, productHandle) {
     const endpoint =
       config.dataset.bundleAccessEndpoint || "/apps/student-automatic-discount/proxy/bundle-access";
     const url = new URL(endpoint, window.location.origin);
     url.searchParams.set("shop", getShopDomain(config));
-    url.searchParams.set("logged_in_customer_id", getCustomerId(config));
+    const customerId = getCustomerId(config);
+    if (customerId) {
+      url.searchParams.set("logged_in_customer_id", customerId);
+    }
     url.searchParams.set("collection_handle", collectionHandle);
+    url.searchParams.set("product_handle", productHandle);
 
     const response = await fetch(url.toString(), {
       credentials: "same-origin",
@@ -380,15 +391,20 @@
 
     const targets = collectTargets();
     const protectedCollectionHandle = getProtectedCollectionHandle();
-    if (protectedCollectionHandle) {
+    const protectedProductHandle = getProtectedProductHandle();
+    const protectedHandle = protectedCollectionHandle || protectedProductHandle;
+
+    if (protectedHandle) {
       try {
-        const access = await fetchCollectionAccess(config, protectedCollectionHandle);
+        const access = await fetchCollectionAccess(config, protectedCollectionHandle, protectedProductHandle);
         if (currentToken !== requestToken) return;
 
         if (!access || !access.ok || !access.allowed) {
-          hidePageContent(access?.reason === "no_customer"
-            ? "Please sign in with your BISR account to view this collection."
-            : "This collection is only available to BISR customers.");
+          hidePageContent(
+            access?.reason === "no_customer"
+              ? "Please sign in with your BISR account to view this page."
+              : "This page is only available to BISR customers.",
+          );
 
           const returnUrl = encodeURIComponent(buildReturnUrl());
           const customerId = getCustomerId(config);
@@ -399,12 +415,21 @@
           }
           return;
         }
-      } catch (error) {
-        console.warn("[student-pricing] failed to verify bundle collection access", error);
-      }
+
+        document.documentElement.classList.remove("student-pricing-pending");
+        const overlay = document.querySelector(".student-pricing-bundle-guard");
+        if (overlay instanceof HTMLElement) overlay.remove();
+        const target = document.querySelector("main") || document.querySelector("#MainContent") || document.body;
+        if (target instanceof HTMLElement) {
+          target.style.visibility = "";
+          target.style.pointerEvents = "";
+        }
+    } catch (error) {
+      console.warn("[student-pricing] failed to verify bundle collection access", error);
+    }
     }
 
-    if (!getCustomerId(config)) return;
+    if (!getCustomerId(config) && !protectedHandle) return;
 
     let cleanupPayload = null;
     try {

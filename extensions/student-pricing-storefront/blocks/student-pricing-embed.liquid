@@ -1,9 +1,25 @@
+{% assign request_path = request.path | downcase %}
+{% assign is_bisr_bundle_path = request_path contains '/products/primary-years-bundle' or request_path contains '/collections/all-bundles' or request_path contains '/collections/bundle' %}
+
+{% if is_bisr_bundle_path %}
+  <style>
+    html.student-pricing-pending body {
+      visibility: hidden !important;
+    }
+  </style>
+  <script>
+    document.documentElement.classList.add('student-pricing-pending');
+  </script>
+{% endif %}
+
 <div
   id="student-pricing-config-{{ block.id }}"
   class="student-pricing-config"
   hidden
   data-endpoint="/apps/student-automatic-discount/proxy/student-pricing"
   data-bundle-access-endpoint="/apps/student-automatic-discount/proxy/bundle-access"
+  data-protected-product-handles="primary-years-bundle"
+  data-protected-collection-handles="bundle,all-bundles"
   data-shop="{{ shop.myshopify_domain }}"
   data-customer-id="{{ customer.id | default: '' }}"
 ></div>

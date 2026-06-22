@@ -16,6 +16,7 @@ type GraphqlClient = {
 };
 
 const BISR_COLLECTION_HANDLES = new Set(["bundle", "all-bundles"]);
+const BISR_PRODUCT_HANDLES = new Set(["primary-years-bundle"]);
 const BISR_INSTITUTE_KEY = "bisr";
 
 function normalizeEmail(input: string | null | undefined) {
@@ -143,11 +144,20 @@ function isProtectedCollection(collectionHandle: string) {
   return BISR_COLLECTION_HANDLES.has(String(collectionHandle || "").trim().toLowerCase());
 }
 
+function isProtectedProduct(productHandle: string) {
+  return BISR_PRODUCT_HANDLES.has(String(productHandle || "").trim().toLowerCase());
+}
+
 async function handle(request: Request) {
   const url = new URL(request.url);
   const shop = normalizeShopDomain(url.searchParams.get("shop"));
   const collectionHandle = String(
     url.searchParams.get("collection_handle") || url.searchParams.get("collectionHandle") || "",
+  )
+    .trim()
+    .toLowerCase();
+  const productHandle = String(
+    url.searchParams.get("product_handle") || url.searchParams.get("productHandle") || "",
   )
     .trim()
     .toLowerCase();
@@ -171,12 +181,13 @@ async function handle(request: Request) {
     return json({ ok: false, allowed: false, error: "Missing shop parameter." }, { status: 400 });
   }
 
-  if (!isProtectedCollection(collectionHandle)) {
+  if (!isProtectedCollection(collectionHandle) && !isProtectedProduct(productHandle)) {
     return json({
       ok: true,
       allowed: true,
       protected: false,
       collectionHandle,
+      productHandle,
       customerId: customerId || null,
     });
   }
@@ -188,6 +199,7 @@ async function handle(request: Request) {
       protected: true,
       reason: "no_customer",
       collectionHandle,
+      productHandle,
       customerId: null,
       requiredInstituteKey: BISR_INSTITUTE_KEY,
     });
@@ -218,6 +230,7 @@ async function handle(request: Request) {
       protected: true,
       reason: allowed ? "allowed" : "not_allowed",
       collectionHandle,
+      productHandle,
       customerId,
       instituteKey: instituteKey || null,
       requiredInstituteKey: BISR_INSTITUTE_KEY,
@@ -230,6 +243,7 @@ async function handle(request: Request) {
         error: "Failed to evaluate bundle access.",
         detail: errorMessage(error),
         collectionHandle,
+        productHandle,
         customerId,
         requiredInstituteKey: BISR_INSTITUTE_KEY,
       },
