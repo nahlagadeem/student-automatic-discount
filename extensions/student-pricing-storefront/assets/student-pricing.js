@@ -81,6 +81,79 @@
     return PROTECTED_PRODUCT_HANDLES.has(handle) ? handle : "";
   }
 
+  function getHandleFromAnchor(anchor) {
+    if (!(anchor instanceof HTMLAnchorElement)) return "";
+    const href = anchor.getAttribute("href") || "";
+    const productHandle = extractHandleFromPath(href);
+    if (productHandle) return productHandle;
+
+    const collectionHandle = extractCollectionHandleFromPath(href);
+    if (collectionHandle) return collectionHandle;
+
+    return "";
+  }
+
+  function getProtectedRoots() {
+    const roots = [];
+    const seen = new Set();
+    const links = document.querySelectorAll("a[href*='/products/'], a[href*='/collections/']");
+
+    for (const link of links) {
+      if (!(link instanceof HTMLAnchorElement)) continue;
+      const handle = getHandleFromAnchor(link);
+      if (!handle) continue;
+
+      const isProtected =
+        PROTECTED_PRODUCT_HANDLES.has(handle) || PROTECTED_COLLECTION_HANDLES.has(handle);
+      if (!isProtected) continue;
+
+      const root = link.closest(CARD_ROOT_SELECTOR) || link.parentElement || link;
+      if (!(root instanceof HTMLElement)) continue;
+
+      if (!root.dataset.studentPricingProtectedKey) {
+        root.dataset.studentPricingProtectedKey = `${handle}-${seen.size + 1}`;
+      }
+      const key = `${handle}::${root.dataset.studentPricingProtectedKey}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      roots.push({ handle, root });
+    }
+
+    return roots;
+  }
+
+  function setRootHidden(root, hidden) {
+    if (!(root instanceof HTMLElement)) return;
+
+    if (hidden) {
+      if (!root.dataset.studentPricingOriginalDisplay) {
+        root.dataset.studentPricingOriginalDisplay = root.style.display || "";
+      }
+      root.style.display = "none";
+      root.setAttribute("data-student-pricing-protected-hidden", "true");
+      return;
+    }
+
+    if (root.getAttribute("data-student-pricing-protected-hidden") !== "true") return;
+
+    const originalDisplay = root.dataset.studentPricingOriginalDisplay || "";
+    root.style.display = originalDisplay;
+    root.removeAttribute("data-student-pricing-protected-hidden");
+    delete root.dataset.studentPricingOriginalDisplay;
+  }
+
+  function hideProtectedRoots() {
+    for (const entry of getProtectedRoots()) {
+      setRootHidden(entry.root, true);
+    }
+  }
+
+  function unhideProtectedRoots() {
+    for (const entry of getProtectedRoots()) {
+      setRootHidden(entry.root, false);
+    }
+  }
+
   function redirectTo(url) {
     if (!url) return;
     if (window.location.href === url) return;
@@ -390,6 +463,7 @@
     if (!(config instanceof HTMLElement)) return;
 
     const targets = collectTargets();
+    hideProtectedRoots();
     const protectedCollectionHandle = getProtectedCollectionHandle();
     const protectedProductHandle = getProtectedProductHandle();
     const protectedHandle = protectedCollectionHandle || protectedProductHandle;
@@ -424,9 +498,10 @@
           target.style.visibility = "";
           target.style.pointerEvents = "";
         }
-    } catch (error) {
-      console.warn("[student-pricing] failed to verify bundle collection access", error);
-    }
+        unhideProtectedRoots();
+      } catch (error) {
+        console.warn("[student-pricing] failed to verify bundle collection access", error);
+      }
     }
 
     if (!getCustomerId(config) && !protectedHandle) return;
