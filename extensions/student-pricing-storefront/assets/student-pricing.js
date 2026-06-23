@@ -142,16 +142,26 @@
     delete root.dataset.studentPricingOriginalDisplay;
   }
 
-  function hideProtectedRoots() {
-    for (const entry of getProtectedRoots()) {
-      setRootHidden(entry.root, true);
-    }
-  }
-
   function unhideProtectedRoots() {
     for (const entry of getProtectedRoots()) {
       setRootHidden(entry.root, false);
     }
+  }
+
+  function buildAccessCheckParams(handle) {
+    const params = {
+      collectionHandle: "",
+      productHandle: "",
+    };
+
+    if (!handle) return params;
+    if (PROTECTED_PRODUCT_HANDLES.has(handle)) {
+      params.productHandle = handle;
+      return params;
+    }
+
+    params.collectionHandle = handle;
+    return params;
   }
 
   function redirectTo(url) {
@@ -463,48 +473,59 @@
     if (!(config instanceof HTMLElement)) return;
 
     const targets = collectTargets();
-    hideProtectedRoots();
     const protectedCollectionHandle = getProtectedCollectionHandle();
     const protectedProductHandle = getProtectedProductHandle();
     const protectedHandle = protectedCollectionHandle || protectedProductHandle;
+    const protectedRoots = getProtectedRoots();
+    const protectedRootHandle = protectedHandle || protectedRoots[0]?.handle || "";
+    const needsAccessCheck = Boolean(protectedRootHandle);
 
-    if (protectedHandle) {
+    if (needsAccessCheck) {
       try {
-        const access = await fetchCollectionAccess(config, protectedCollectionHandle, protectedProductHandle);
+        const { collectionHandle, productHandle } = buildAccessCheckParams(protectedRootHandle);
+        const access = await fetchCollectionAccess(config, collectionHandle, productHandle);
         if (currentToken !== requestToken) return;
 
         if (!access || !access.ok || !access.allowed) {
-          hidePageContent(
-            access?.reason === "no_customer"
-              ? "Please sign in with your BISR account to view this page."
-              : "This page is only available to BISR customers.",
-          );
-
-          const returnUrl = encodeURIComponent(buildReturnUrl());
-          const customerId = getCustomerId(config);
-          if (!customerId && window.location.pathname !== "/account/login") {
-            redirectTo(`/account/login?return_url=${returnUrl}`);
-          } else {
-            redirectTo("/");
+          for (const entry of protectedRoots) {
+            setRootHidden(entry.root, true);
           }
+
+          if (protectedHandle) {
+            hidePageContent(
+              access?.reason === "no_customer"
+                ? "Please sign in with your BISR account to view this page."
+                : "This page is only available to BISR customers.",
+            );
+
+            const returnUrl = encodeURIComponent(buildReturnUrl());
+            const customerId = getCustomerId(config);
+            if (!customerId && window.location.pathname !== "/account/login") {
+              redirectTo(`/account/login?return_url=${returnUrl}`);
+            } else {
+              redirectTo("/");
+            }
+          }
+
           return;
         }
 
-        document.documentElement.classList.remove("student-pricing-pending");
-        const overlay = document.querySelector(".student-pricing-bundle-guard");
-        if (overlay instanceof HTMLElement) overlay.remove();
-        const target = document.querySelector("main") || document.querySelector("#MainContent") || document.body;
-        if (target instanceof HTMLElement) {
-          target.style.visibility = "";
-          target.style.pointerEvents = "";
-        }
         unhideProtectedRoots();
+
+        if (protectedHandle) {
+          document.documentElement.classList.remove("student-pricing-pending");
+          const overlay = document.querySelector(".student-pricing-bundle-guard");
+          if (overlay instanceof HTMLElement) overlay.remove();
+          const target = document.querySelector("main") || document.querySelector("#MainContent") || document.body;
+          if (target instanceof HTMLElement) {
+            target.style.visibility = "";
+            target.style.pointerEvents = "";
+          }
+        }
       } catch (error) {
         console.warn("[student-pricing] failed to verify bundle collection access", error);
       }
     }
-
-    if (!getCustomerId(config) && !protectedHandle) return;
 
     let cleanupPayload = null;
     try {
