@@ -1,14 +1,21 @@
 {% assign request_path = request.path | downcase %}
+{% assign is_bundle_access_page = false %}
 
 {% if request_path contains '/products/primary-years-bundle' or request_path contains '/collections/all-bundles' or request_path contains '/collections/bundle' %}
-  <style>
-    html.student-pricing-pending body {
-      visibility: hidden !important;
-    }
-  </style>
-  <script>
-    document.documentElement.classList.add('student-pricing-pending');
-  </script>
+  {% assign is_bundle_access_page = true %}
+{% endif %}
+
+{% if is_bundle_access_page %}
+  {% unless request.design_mode %}
+    <style>
+      html.student-pricing-pending body {
+        visibility: hidden !important;
+      }
+    </style>
+    <script>
+      document.documentElement.classList.add('student-pricing-pending');
+    </script>
+  {% endunless %}
 {% endif %}
 
 <div
@@ -21,6 +28,7 @@
   data-protected-collection-handles="bundle,all-bundles"
   data-shop="{{ shop.myshopify_domain }}"
   data-customer-id="{{ customer.id | default: '' }}"
+  data-design-mode="{% if request.design_mode %}true{% else %}false{% endif %}"
 ></div>
 
 {% schema %}

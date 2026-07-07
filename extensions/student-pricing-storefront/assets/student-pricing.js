@@ -69,6 +69,13 @@
     return String((config && config.dataset && config.dataset.customerId) || "").trim();
   }
 
+  function isDesignMode(config) {
+    const configValue = String((config && config.dataset && config.dataset.designMode) || "").trim().toLowerCase();
+    if (configValue === "true") return true;
+
+    return Boolean(window.Shopify && window.Shopify.designMode);
+  }
+
   function getProtectedCollectionHandle() {
     const handle = extractCollectionHandleFromPath(window.location.pathname);
     if (!handle) return "";
@@ -479,6 +486,12 @@
     const protectedRoots = getProtectedRoots();
     const protectedRootHandle = protectedHandle || protectedRoots[0]?.handle || "";
     const needsAccessCheck = Boolean(protectedRootHandle);
+
+    if (needsAccessCheck && isDesignMode(config)) {
+      document.documentElement.classList.remove("student-pricing-pending");
+      unhideProtectedRoots();
+      return;
+    }
 
     if (needsAccessCheck) {
       try {
