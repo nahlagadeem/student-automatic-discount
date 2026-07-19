@@ -7,9 +7,10 @@ import {
   resolveAdminClient,
   runAdminGraphql,
 } from "../student-discount.server";
-import { getInstituteByEmail, getInstituteByLabel } from "../institutes";
+import { getInstituteByEmail, getInstituteByKey, getInstituteByLabel } from "../institutes";
 import { buildCustomerGid, linkPortalUserToCustomer } from "../portal-user-links.server";
 import { setCustomerPortalProfileMetafields } from "../customer-profile-metafields.server";
+import { isBundleVisibleForInstitute } from "../bundle-visibility-rules.server";
 
 type GraphqlClient = {
   graphql: (query: string, opts?: { variables?: Record<string, unknown> }) => Promise<Response>;
@@ -17,7 +18,6 @@ type GraphqlClient = {
 
 const BISR_COLLECTION_HANDLES = new Set(["bundle", "all-bundles"]);
 const BISR_PRODUCT_HANDLES = new Set(["primary-years-bundle"]);
-const BISR_INSTITUTE_KEY = "bisr";
 
 function normalizeEmail(input: string | null | undefined) {
   return String(input || "").trim().toLowerCase();
@@ -87,6 +87,7 @@ async function getCustomerInstituteKey(admin: GraphqlClient, shop: string, custo
       await linkPortalUserToCustomer({
         shop,
         portalUserId: portalUser.id,
+        customerId: customer.id,
         customerGid: customer.id,
       });
     } catch (linkError) {
@@ -201,7 +202,6 @@ async function handle(request: Request) {
       collectionHandle,
       productHandle,
       customerId: null,
-      requiredInstituteKey: BISR_INSTITUTE_KEY,
     });
   }
 
@@ -222,18 +222,19 @@ async function handle(request: Request) {
 
   try {
     const instituteKey = await getCustomerInstituteKey(admin, shop, buildCustomerGid(customerId));
-    const allowed = instituteKey === BISR_INSTITUTE_KEY;
+    const institute = getInstituteByKey(instituteKey);
+    const allowed = institute ? await isBundleVisibleForInstitute(shop, instituteKey) : false;
 
     return json({
       ok: true,
       allowed,
       protected: true,
-      reason: allowed ? "allowed" : "not_allowed",
+      reason: allowed ? "allowed" : institute ? "disabled_for_institute" : "no_institute",
       collectionHandle,
       productHandle,
       customerId,
       instituteKey: instituteKey || null,
-      requiredInstituteKey: BISR_INSTITUTE_KEY,
+      instituteLabel: institute?.label || null,
     });
   } catch (error) {
     return json(
@@ -245,7 +246,6 @@ async function handle(request: Request) {
         collectionHandle,
         productHandle,
         customerId,
-        requiredInstituteKey: BISR_INSTITUTE_KEY,
       },
       { status: 500 },
     );
