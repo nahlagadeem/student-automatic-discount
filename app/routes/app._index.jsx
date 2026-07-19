@@ -5,11 +5,6 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import prisma from "../db.server";
 import { ensureAutomaticDiscountRuleTable } from "../automatic-discount-rules.server";
 import {
-  ensureBundleVisibilityRuleTable,
-  listBundleVisibilityRules,
-  setBundleVisibilityRule,
-} from "../bundle-visibility-rules.server";
-import {
   ensureAutomaticDiscountConfigTable,
   syncPortalUsersToCustomerTags,
   syncErrorMessage,
@@ -40,13 +35,6 @@ function summarizeActionResult(data) {
   if (data.error) lines.push(`error: ${data.error}`);
   if (data.warning) lines.push(`warning: ${data.warning}`);
   if (data.deleted) lines.push("action: rule deleted");
-  if (data.bundleVisibilityRule) {
-    lines.push(
-      `bundle visibility: ${data.bundleVisibilityRule.instituteLabel} | ${
-        data.bundleVisibilityRule.isEnabled ? "enabled" : "disabled"
-      }`
-    );
-  }
   if (data.savedRule) {
     lines.push(
       `saved: ${data.savedRule.instituteLabel} | ${data.savedRule.categoryLabel} | ${data.savedRule.percentage}%`
@@ -146,7 +134,6 @@ export const loader = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
   await ensureAutomaticDiscountRuleTable();
   await ensureAutomaticDiscountConfigTable();
-  await ensureBundleVisibilityRuleTable();
 
   const rules = await prisma.automaticDiscountRule.findMany({
     where: { shop: session.shop },
@@ -154,14 +141,12 @@ export const loader = async ({ request }) => {
   });
 
   const collections = await fetchCollections(admin);
-  const bundleVisibilityRules = await listBundleVisibilityRules(session.shop);
 
   return {
     shop: session.shop,
     instituteOptions: INSTITUTE_OPTIONS,
     categories: mergeCategoriesForExistingRules(collections, rules),
     rules,
-    bundleVisibilityRules,
   };
 };
 
@@ -169,27 +154,9 @@ export const action = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
   await ensureAutomaticDiscountRuleTable();
   await ensureAutomaticDiscountConfigTable();
-  await ensureBundleVisibilityRuleTable();
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "save").trim();
-
-  if (intent === "bundle-visibility") {
-    const instituteKey = String(formData.get("instituteKey") || "").trim();
-    const isEnabled = String(formData.get("isEnabled") || "").trim() === "true";
-
-    try {
-      const bundleVisibilityRule = await setBundleVisibilityRule({
-        shop: session.shop,
-        instituteKey,
-        isEnabled,
-      });
-
-      return { ok: true, bundleVisibilityRule };
-    } catch (error) {
-      return { ok: false, error: error instanceof Error ? error.message : String(error) };
-    }
-  }
 
   if (intent === "delete") {
     const ruleId = Number(formData.get("ruleId"));
@@ -288,7 +255,7 @@ export const action = async ({ request }) => {
 };
 
 export default function Index() {
-  const { instituteOptions, categories, rules, bundleVisibilityRules } = useLoaderData();
+  const { instituteOptions, categories, rules } = useLoaderData();
   const fetcher = useFetcher();
   const shopify = useAppBridge();
 
@@ -340,14 +307,6 @@ export default function Index() {
     const form = new FormData();
     form.set("intent", "delete");
     form.set("ruleId", String(ruleId));
-    fetcher.submit(form, { method: "POST" });
-  };
-
-  const setBundleVisibility = (rule, isEnabled) => {
-    const form = new FormData();
-    form.set("intent", "bundle-visibility");
-    form.set("instituteKey", rule.key);
-    form.set("isEnabled", String(isEnabled));
     fetcher.submit(form, { method: "POST" });
   };
 
@@ -476,48 +435,6 @@ export default function Index() {
             ))}
           </s-stack>
         )}
-      </s-section>
-
-      <s-section heading="Bundle Visibility">
-        <s-paragraph>
-          Bundle pages are visible to enabled institutes by default. Customers without a known institute remain blocked.
-        </s-paragraph>
-        <s-stack gap="base">
-          {(bundleVisibilityRules ?? []).map((rule) => (
-            <s-box
-              key={rule.key}
-              padding="base"
-              borderWidth="base"
-              borderRadius="base"
-              background="subdued"
-            >
-              <s-stack gap="tight">
-                <s-heading>{rule.label}</s-heading>
-                <s-paragraph>
-                  {rule.domain} | {rule.isEnabled ? "Enabled" : "Disabled"}
-                  {rule.isDefault ? " | default" : ""}
-                </s-paragraph>
-                <s-stack direction="inline" gap="base">
-                  <s-button
-                    disabled={rule.isEnabled}
-                    onClick={() => setBundleVisibility(rule, true)}
-                    {...(isSubmitting ? { loading: true } : {})}
-                  >
-                    Enable
-                  </s-button>
-                  <s-button
-                    tone="critical"
-                    disabled={!rule.isEnabled}
-                    onClick={() => setBundleVisibility(rule, false)}
-                    {...(isSubmitting ? { loading: true } : {})}
-                  >
-                    Disable
-                  </s-button>
-                </s-stack>
-              </s-stack>
-            </s-box>
-          ))}
-        </s-stack>
       </s-section>
 
       {fetcher.data ? (

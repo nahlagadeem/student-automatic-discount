@@ -23,6 +23,7 @@ export default function App() {
       {authenticated ? (
         <s-app-nav>
           <s-link href="/app">Home</s-link>
+          <s-link href="/app/bundle-visibility">Bundle visibility</s-link>
           <s-link href="/app/sync-discounts">Sync discounts</s-link>
           <s-link href="/app/rebuild-neo-offer">Rebuild Neo offer</s-link>
           <s-link href="/app/additional">Additional page</s-link>
