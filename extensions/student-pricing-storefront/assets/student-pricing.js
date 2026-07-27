@@ -155,6 +155,16 @@
     }
   }
 
+  function hideProtectedRoots(roots) {
+    for (const entry of roots || getProtectedRoots()) {
+      setRootHidden(entry.root, true);
+    }
+  }
+
+  function setBundleAccessAllowed(allowed) {
+    document.documentElement.classList.toggle("student-pricing-bundle-access-allowed", Boolean(allowed));
+  }
+
   function buildAccessCheckParams(handle) {
     const params = {
       collectionHandle: "",
@@ -175,11 +185,6 @@
     if (!url) return;
     if (window.location.href === url) return;
     window.location.replace(url);
-  }
-
-  function buildReturnUrl() {
-    const url = new URL(window.location.href);
-    return `${url.pathname}${url.search}${url.hash}`;
   }
 
   function hidePageContent(message) {
@@ -489,20 +494,22 @@
 
     if (needsAccessCheck && isDesignMode(config)) {
       document.documentElement.classList.remove("student-pricing-pending");
+      setBundleAccessAllowed(true);
       unhideProtectedRoots();
       return;
     }
 
     if (needsAccessCheck) {
+      setBundleAccessAllowed(false);
+      hideProtectedRoots(protectedRoots);
+
       try {
         const { collectionHandle, productHandle } = buildAccessCheckParams(protectedRootHandle);
         const access = await fetchCollectionAccess(config, collectionHandle, productHandle);
         if (currentToken !== requestToken) return;
 
         if (!access || !access.ok || !access.allowed) {
-          for (const entry of protectedRoots) {
-            setRootHidden(entry.root, true);
-          }
+          hideProtectedRoots(protectedRoots);
 
           if (protectedHandle) {
             hidePageContent(
@@ -511,18 +518,13 @@
                 : "Complete your student profile before viewing this page.",
             );
 
-            const returnUrl = encodeURIComponent(buildReturnUrl());
-            const customerId = getCustomerId(config);
-            if (!customerId && window.location.pathname !== "/account/login") {
-              redirectTo(`/account/login?return_url=${returnUrl}`);
-            } else {
-              redirectTo("/");
-            }
+            redirectTo("/");
           }
 
           return;
         }
 
+        setBundleAccessAllowed(true);
         unhideProtectedRoots();
 
         if (protectedHandle) {
@@ -537,6 +539,13 @@
         }
       } catch (error) {
         console.warn("[student-pricing] failed to verify bundle collection access", error);
+        hideProtectedRoots(protectedRoots);
+
+        if (protectedHandle) {
+          hidePageContent("Complete your student profile before viewing this page.");
+          redirectTo("/");
+          return;
+        }
       }
     }
 

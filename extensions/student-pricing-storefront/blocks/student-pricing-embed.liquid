@@ -5,18 +5,28 @@
   {% assign is_bundle_access_page = true %}
 {% endif %}
 
-{% if is_bundle_access_page %}
-  {% unless request.design_mode %}
-    <style>
-      html.student-pricing-pending body {
-        visibility: hidden !important;
-      }
-    </style>
-    <script>
+{% unless request.design_mode %}
+  <style>
+    html.student-pricing-pending body {
+      visibility: hidden !important;
+    }
+
+    html.student-pricing-protect-bundles:not(.student-pricing-bundle-access-allowed) a[href*="/collections/all-bundles"],
+    html.student-pricing-protect-bundles:not(.student-pricing-bundle-access-allowed) a[href*="/collections/bundle"],
+    html.student-pricing-protect-bundles:not(.student-pricing-bundle-access-allowed) a[href*="/products/primary-years-bundle"],
+    html.student-pricing-protect-bundles:not(.student-pricing-bundle-access-allowed) li:has(a[href*="/collections/all-bundles"]),
+    html.student-pricing-protect-bundles:not(.student-pricing-bundle-access-allowed) li:has(a[href*="/collections/bundle"]),
+    html.student-pricing-protect-bundles:not(.student-pricing-bundle-access-allowed) li:has(a[href*="/products/primary-years-bundle"]) {
+      display: none !important;
+    }
+  </style>
+  <script>
+    document.documentElement.classList.add('student-pricing-protect-bundles');
+    {% if is_bundle_access_page %}
       document.documentElement.classList.add('student-pricing-pending');
-    </script>
-  {% endunless %}
-{% endif %}
+    {% endif %}
+  </script>
+{% endunless %}
 
 <div
   id="student-pricing-config-{{ block.id }}"
