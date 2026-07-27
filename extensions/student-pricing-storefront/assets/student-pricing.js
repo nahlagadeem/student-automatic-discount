@@ -148,6 +148,12 @@
     }
   }
 
+  function hideProtectedRoots(roots) {
+    for (const entry of roots || getProtectedRoots()) {
+      setRootHidden(entry.root, true);
+    }
+  }
+
   function setBundleAccessAllowed(allowed) {
     document.documentElement.classList.toggle("student-pricing-bundle-access-allowed", Boolean(allowed));
   }
@@ -166,6 +172,12 @@
 
     params.collectionHandle = handle;
     return params;
+  }
+
+  function redirectTo(url) {
+    if (!url) return;
+    if (window.location.pathname === url) return;
+    window.location.replace(url);
   }
 
   function isIgnoredPriceElement(candidate) {
@@ -448,8 +460,19 @@
 
       try {
         const { collectionHandle, productHandle } = buildAccessCheckParams(protectedRootHandle);
-        await fetchCollectionAccess(config, collectionHandle, productHandle);
+        const access = await fetchCollectionAccess(config, collectionHandle, productHandle);
         if (currentToken !== requestToken) return;
+
+        if (!access || !access.ok || !access.allowed) {
+          setBundleAccessAllowed(false);
+          hideProtectedRoots(protectedRoots);
+
+          if (protectedHandle) {
+            redirectTo("/");
+          }
+
+          return;
+        }
 
         setBundleAccessAllowed(true);
         unhideProtectedRoots();
@@ -466,8 +489,12 @@
         }
       } catch (error) {
         console.warn("[student-pricing] failed to verify bundle collection access", error);
-        setBundleAccessAllowed(true);
-        unhideProtectedRoots();
+        setBundleAccessAllowed(false);
+        hideProtectedRoots(protectedRoots);
+
+        if (protectedHandle) {
+          redirectTo("/");
+        }
       }
     }
 

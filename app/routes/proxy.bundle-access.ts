@@ -261,16 +261,6 @@ async function handle(request: Request) {
     });
   }
 
-  return json({
-    ok: true,
-    allowed: true,
-    protected: true,
-    reason: "public_bundle_access_enabled",
-    collectionHandle,
-    productHandle,
-    customerId: customerId || null,
-  });
-
   if (!customerId) {
     return json({
       ok: true,
