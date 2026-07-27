@@ -105,7 +105,13 @@ async function getCustomerBundleAccessProfile(admin: GraphqlClient, shop: string
 
   const portalUser = await findPortalUserForCustomer(shop, customer.id, email);
   if (!portalUser?.id) {
-    return { customer, portalUser: null, instituteKey: "", institute: null };
+    const instituteFromCustomerEmail = getInstituteByEmail(email);
+    return {
+      customer,
+      portalUser: null,
+      instituteKey: instituteFromCustomerEmail?.key || "",
+      institute: instituteFromCustomerEmail || null,
+    };
   }
 
   const instituteKey =
@@ -259,7 +265,7 @@ async function handle(request: Request) {
       shop,
       buildCustomerGid(customerId),
     );
-    const allowed = Boolean(portalUser?.id && institute);
+    const allowed = Boolean(institute);
 
     return json({
       ok: true,

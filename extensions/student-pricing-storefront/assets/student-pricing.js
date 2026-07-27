@@ -114,7 +114,7 @@
         PROTECTED_PRODUCT_HANDLES.has(handle) || PROTECTED_COLLECTION_HANDLES.has(handle);
       if (!isProtected) continue;
 
-      const root = link.closest(CARD_ROOT_SELECTOR) || link.parentElement || link;
+      const root = link.closest("header, nav, [role='navigation']") ? link : link.closest(CARD_ROOT_SELECTOR) || link.parentElement || link;
       if (!(root instanceof HTMLElement)) continue;
 
       if (!root.dataset.studentPricingProtectedKey) {
