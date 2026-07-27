@@ -12,6 +12,25 @@
     a[href*="/products/primary-years-bundle"] {
       display: none !important;
     }
+
+    main li:has(a[href*="/collections/all-bundles"]),
+    main li:has(a[href*="/collections/bundle"]),
+    main li:has(a[href*="/products/primary-years-bundle"]),
+    main .grid__item:has(a[href*="/collections/all-bundles"]),
+    main .grid__item:has(a[href*="/collections/bundle"]),
+    main .grid__item:has(a[href*="/products/primary-years-bundle"]),
+    main [data-product-card]:has(a[href*="/products/primary-years-bundle"]),
+    main [data-card-wrapper]:has(a[href*="/products/primary-years-bundle"]),
+    #MainContent li:has(a[href*="/collections/all-bundles"]),
+    #MainContent li:has(a[href*="/collections/bundle"]),
+    #MainContent li:has(a[href*="/products/primary-years-bundle"]),
+    #MainContent .grid__item:has(a[href*="/collections/all-bundles"]),
+    #MainContent .grid__item:has(a[href*="/collections/bundle"]),
+    #MainContent .grid__item:has(a[href*="/products/primary-years-bundle"]),
+    #MainContent [data-product-card]:has(a[href*="/products/primary-years-bundle"]),
+    #MainContent [data-card-wrapper]:has(a[href*="/products/primary-years-bundle"]) {
+      display: none !important;
+    }
   </style>
 
   {% if is_bundle_access_page %}
