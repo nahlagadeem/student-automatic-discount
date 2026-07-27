@@ -26,10 +26,6 @@ function buildCustomerId(url: URL) {
   return String(url.searchParams.get("logged_in_customer_id") || url.searchParams.get("customerId") || "").trim();
 }
 
-function buildCustomerEmail(url: URL) {
-  return normalizeEmail(url.searchParams.get("customer_email") || url.searchParams.get("customerEmail"));
-}
-
 async function fetchCustomerIdentity(admin: GraphqlClient, customerId: string) {
   const data = await runAdminGraphql(
     admin,
@@ -235,7 +231,6 @@ async function handle(request: Request) {
     .trim()
     .toLowerCase();
   const customerId = buildCustomerId(url);
-  const customerEmail = buildCustomerEmail(url);
 
   try {
     await authenticate.public.appProxy(request);
@@ -279,7 +274,7 @@ async function handle(request: Request) {
   }
 
   const customerGid = buildCustomerGid(customerId);
-  const linkedPortalUser = await findPortalUserForCustomer(shop, customerGid, customerEmail);
+  const linkedPortalUser = await findPortalUserForCustomer(shop, customerGid, "");
   if (linkedPortalUser?.id) {
     const { instituteKey, institute } = resolvePortalUserInstitute(linkedPortalUser);
     const allowed = Boolean(institute);

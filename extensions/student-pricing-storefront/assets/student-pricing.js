@@ -193,10 +193,6 @@
     if (customerId) {
       url.searchParams.set("logged_in_customer_id", customerId);
     }
-    const customerEmail = String((config && config.dataset && config.dataset.customerEmail) || "").trim();
-    if (customerEmail) {
-      url.searchParams.set("customer_email", customerEmail);
-    }
     url.searchParams.set("collection_handle", collectionHandle);
     url.searchParams.set("product_handle", productHandle);
 
