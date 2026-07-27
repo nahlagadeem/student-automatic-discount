@@ -34,7 +34,13 @@ async function fetchCustomerIdentity(admin: GraphqlClient, customerId: string) {
         customer(id: $id) {
           id
           email
-          metafield(namespace: "$app:student-discount", key: "institute_key") {
+          instituteKey: metafield(namespace: "$app:student-discount", key: "institute_key") {
+            value
+          }
+          portalInstituteName: metafield(namespace: "$app", key: "portal_institute_name") {
+            value
+          }
+          portalEmailDomain: metafield(namespace: "$app", key: "portal_email_domain") {
             value
           }
         }
@@ -105,12 +111,17 @@ async function getCustomerBundleAccessProfile(admin: GraphqlClient, shop: string
 
   const portalUser = await findPortalUserForCustomer(shop, customer.id, email);
   if (!portalUser?.id) {
-    const instituteFromCustomerEmail = getInstituteByEmail(email);
+    const profileDomain = String(customer?.portalEmailDomain?.value || "").trim();
+    const institute =
+      getInstituteByKey(customer?.instituteKey?.value || "") ||
+      getInstituteByLabel(customer?.portalInstituteName?.value || "") ||
+      getInstituteByEmail(profileDomain ? `student${profileDomain}` : "");
+
     return {
       customer,
       portalUser: null,
-      instituteKey: instituteFromCustomerEmail?.key || "",
-      institute: instituteFromCustomerEmail || null,
+      instituteKey: institute?.key || "",
+      institute: institute || null,
     };
   }
 
