@@ -1,3 +1,26 @@
+{% assign request_path = request.path | downcase %}
+{% assign is_bundle_access_page = false %}
+
+{% if request_path contains '/products/primary-years-bundle' or request_path contains '/collections/all-bundles' or request_path contains '/collections/bundle' %}
+  {% assign is_bundle_access_page = true %}
+{% endif %}
+
+{% unless customer %}
+  <style>
+    a[href*="/collections/all-bundles"],
+    a[href*="/collections/bundle"],
+    a[href*="/products/primary-years-bundle"] {
+      display: none !important;
+    }
+  </style>
+
+  {% if is_bundle_access_page %}
+    <script>
+      window.location.replace('/');
+    </script>
+  {% endif %}
+{% endunless %}
+
 <div
   id="student-pricing-config-{{ block.id }}"
   class="student-pricing-config"
