@@ -1,30 +1,3 @@
-{% assign request_path = request.path | downcase %}
-{% assign is_bundle_access_page = false %}
-
-{% if request_path contains '/products/primary-years-bundle' or request_path contains '/collections/all-bundles' or request_path contains '/collections/bundle' %}
-  {% assign is_bundle_access_page = true %}
-{% endif %}
-
-{% unless request.design_mode %}
-  <style>
-    html.student-pricing-pending body {
-      visibility: hidden !important;
-    }
-
-    html.student-pricing-protect-bundles:not(.student-pricing-bundle-access-allowed) a[href*="/collections/all-bundles"],
-    html.student-pricing-protect-bundles:not(.student-pricing-bundle-access-allowed) a[href*="/collections/bundle"],
-    html.student-pricing-protect-bundles:not(.student-pricing-bundle-access-allowed) a[href*="/products/primary-years-bundle"] {
-      display: none !important;
-    }
-  </style>
-  <script>
-    document.documentElement.classList.add('student-pricing-protect-bundles');
-    {% if is_bundle_access_page %}
-      document.documentElement.classList.add('student-pricing-pending');
-    {% endif %}
-  </script>
-{% endunless %}
-
 <div
   id="student-pricing-config-{{ block.id }}"
   class="student-pricing-config"

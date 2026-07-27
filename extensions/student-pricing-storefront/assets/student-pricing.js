@@ -69,13 +69,6 @@
     return String((config && config.dataset && config.dataset.customerId) || "").trim();
   }
 
-  function isDesignMode(config) {
-    const configValue = String((config && config.dataset && config.dataset.designMode) || "").trim().toLowerCase();
-    if (configValue === "true") return true;
-
-    return Boolean(window.Shopify && window.Shopify.designMode);
-  }
-
   function getProtectedCollectionHandle() {
     const handle = extractCollectionHandleFromPath(window.location.pathname);
     if (!handle) return "";
@@ -155,12 +148,6 @@
     }
   }
 
-  function hideProtectedRoots(roots) {
-    for (const entry of roots || getProtectedRoots()) {
-      setRootHidden(entry.root, true);
-    }
-  }
-
   function setBundleAccessAllowed(allowed) {
     document.documentElement.classList.toggle("student-pricing-bundle-access-allowed", Boolean(allowed));
   }
@@ -179,43 +166,6 @@
 
     params.collectionHandle = handle;
     return params;
-  }
-
-  function redirectTo(url) {
-    if (!url) return;
-    if (window.location.href === url) return;
-    window.location.replace(url);
-  }
-
-  function hidePageContent(message) {
-    const target = document.querySelector("main") || document.querySelector("#MainContent") || document.body;
-    if (!(target instanceof HTMLElement)) return;
-
-    target.style.visibility = "hidden";
-    target.style.pointerEvents = "none";
-
-    let overlay = document.querySelector(".student-pricing-bundle-guard");
-    if (!(overlay instanceof HTMLElement)) {
-      overlay = document.createElement("div");
-      overlay.className = "student-pricing-bundle-guard";
-      overlay.style.position = "fixed";
-      overlay.style.inset = "0";
-      overlay.style.zIndex = "99999";
-      overlay.style.display = "flex";
-      overlay.style.alignItems = "center";
-      overlay.style.justifyContent = "center";
-      overlay.style.padding = "24px";
-      overlay.style.background = "rgba(255,255,255,0.98)";
-      overlay.style.color = "#111";
-      overlay.style.textAlign = "center";
-      overlay.style.fontFamily = "inherit";
-      document.body.appendChild(overlay);
-    }
-
-    overlay.innerHTML =
-      `<div style="max-width: 560px; margin: 0 auto;">` +
-      `<h1 style="margin: 0 0 12px; font-size: 1.6rem; line-height: 1.25;">${escapeHtml(message)}</h1>` +
-      `</div>`;
   }
 
   function isIgnoredPriceElement(candidate) {
@@ -492,37 +442,14 @@
     const protectedRootHandle = protectedHandle || protectedRoots[0]?.handle || "";
     const needsAccessCheck = Boolean(protectedRootHandle);
 
-    if (needsAccessCheck && isDesignMode(config)) {
-      document.documentElement.classList.remove("student-pricing-pending");
+    if (needsAccessCheck) {
       setBundleAccessAllowed(true);
       unhideProtectedRoots();
-      return;
-    }
-
-    if (needsAccessCheck) {
-      setBundleAccessAllowed(false);
-      hideProtectedRoots(protectedRoots);
 
       try {
         const { collectionHandle, productHandle } = buildAccessCheckParams(protectedRootHandle);
-        const access = await fetchCollectionAccess(config, collectionHandle, productHandle);
+        await fetchCollectionAccess(config, collectionHandle, productHandle);
         if (currentToken !== requestToken) return;
-
-        if (!access || !access.ok || !access.allowed) {
-          hideProtectedRoots(protectedRoots);
-
-          if (protectedHandle) {
-            hidePageContent(
-              access?.reason === "no_customer"
-                ? "Please sign in with your student account to view this page."
-                : "Complete your student profile before viewing this page.",
-            );
-
-            redirectTo("/");
-          }
-
-          return;
-        }
 
         setBundleAccessAllowed(true);
         unhideProtectedRoots();
@@ -539,13 +466,8 @@
         }
       } catch (error) {
         console.warn("[student-pricing] failed to verify bundle collection access", error);
-        hideProtectedRoots(protectedRoots);
-
-        if (protectedHandle) {
-          hidePageContent("Complete your student profile before viewing this page.");
-          redirectTo("/");
-          return;
-        }
+        setBundleAccessAllowed(true);
+        unhideProtectedRoots();
       }
     }
 
