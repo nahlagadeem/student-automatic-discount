@@ -102,7 +102,30 @@ async function findPortalUserForCustomer(shop: string, customerGid: string, emai
   });
 }
 
+function resolvePortalUserInstitute(portalUser: {
+  institute?: string | null;
+  schoolEmail?: string | null;
+  email?: string | null;
+}) {
+  const instituteKey =
+    getInstituteByLabel(portalUser?.institute || "")?.key ||
+    getInstituteByEmail(portalUser?.schoolEmail || "")?.key ||
+    getInstituteByEmail(portalUser?.email || "")?.key ||
+    "";
+
+  return {
+    instituteKey,
+    institute: getInstituteByKey(instituteKey),
+  };
+}
+
 async function getCustomerBundleAccessProfile(admin: GraphqlClient, shop: string, customerGid: string) {
+  const linkedPortalUser = await findPortalUserForCustomer(shop, customerGid, "");
+  if (linkedPortalUser?.id) {
+    const { instituteKey, institute } = resolvePortalUserInstitute(linkedPortalUser);
+    return { customer: null, portalUser: linkedPortalUser, instituteKey, institute };
+  }
+
   const customer = await fetchCustomerIdentity(admin, customerGid);
   const email = normalizeEmail(customer?.email);
   if (!customer?.id || !email) {
@@ -125,12 +148,7 @@ async function getCustomerBundleAccessProfile(admin: GraphqlClient, shop: string
     };
   }
 
-  const instituteKey =
-    getInstituteByLabel(portalUser?.institute || "")?.key ||
-    getInstituteByEmail(portalUser?.schoolEmail || "")?.key ||
-    getInstituteByEmail(portalUser?.email || "")?.key ||
-    "";
-  const institute = getInstituteByKey(instituteKey);
+  const { instituteKey, institute } = resolvePortalUserInstitute(portalUser);
 
   if (!instituteKey || !institute) {
     return { customer, portalUser, instituteKey: "", institute: null };
@@ -255,6 +273,25 @@ async function handle(request: Request) {
     });
   }
 
+  const customerGid = buildCustomerGid(customerId);
+  const linkedPortalUser = await findPortalUserForCustomer(shop, customerGid, "");
+  if (linkedPortalUser?.id) {
+    const { instituteKey, institute } = resolvePortalUserInstitute(linkedPortalUser);
+    const allowed = Boolean(institute);
+
+    return json({
+      ok: true,
+      allowed,
+      protected: true,
+      reason: allowed ? "allowed" : "no_institute",
+      collectionHandle,
+      productHandle,
+      customerId,
+      instituteKey: instituteKey || null,
+      instituteLabel: institute?.label || null,
+    });
+  }
+
   let admin;
   try {
     ({ admin } = await resolveAdminClient(shop));
@@ -274,7 +311,7 @@ async function handle(request: Request) {
     const { portalUser, instituteKey, institute } = await getCustomerBundleAccessProfile(
       admin,
       shop,
-      buildCustomerGid(customerId),
+      customerGid,
     );
     const allowed = Boolean(institute);
 
