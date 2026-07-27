@@ -8,9 +8,8 @@ import {
   runAdminGraphql,
 } from "../student-discount.server";
 import { getInstituteByEmail, getInstituteByKey, getInstituteByLabel } from "../institutes";
-import { buildCustomerGid, linkPortalUserToCustomer } from "../portal-user-links.server";
+import { buildCustomerGid, buildLegacyCustomerId, linkPortalUserToCustomer } from "../portal-user-links.server";
 import { setCustomerPortalProfileMetafields } from "../customer-profile-metafields.server";
-import { isBundleVisibleForInstitute } from "../bundle-visibility-rules.server";
 
 type GraphqlClient = {
   graphql: (query: string, opts?: { variables?: Record<string, unknown> }) => Promise<Response>;
@@ -47,15 +46,40 @@ async function fetchCustomerIdentity(admin: GraphqlClient, customerId: string) {
   return data?.customer || null;
 }
 
-async function getCustomerInstituteKey(admin: GraphqlClient, shop: string, customerGid: string) {
-  const customer = await fetchCustomerIdentity(admin, customerGid);
-  const existingKey = String(customer?.metafield?.value || "").trim();
-  if (existingKey) return existingKey;
+async function findPortalUserForCustomer(shop: string, customerGid: string, email: string) {
+  const customerId = buildLegacyCustomerId(customerGid);
 
-  const email = normalizeEmail(customer?.email);
-  if (!email) return "";
+  const linkedUser = await prisma.portalUserCustomerLink.findFirst({
+    where: {
+      shop,
+      OR: [
+        ...(customerId ? [{ customerId }] : []),
+        ...(customerGid ? [{ customerGid }] : []),
+      ],
+    },
+    select: {
+      portalUser: {
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+          schoolEmail: true,
+          institute: true,
+          role: true,
+          roleOther: true,
+          phoneSa: true,
+        },
+      },
+    },
+  });
 
-  const portalUser = await prisma.portalUser.findFirst({
+  if (linkedUser?.portalUser?.id) {
+    return linkedUser.portalUser;
+  }
+
+  if (!email) return null;
+
+  return prisma.portalUser.findFirst({
     where: {
       OR: [{ email }, { schoolEmail: email }],
     },
@@ -70,29 +94,40 @@ async function getCustomerInstituteKey(admin: GraphqlClient, shop: string, custo
       phoneSa: true,
     },
   });
+}
+
+async function getCustomerBundleAccessProfile(admin: GraphqlClient, shop: string, customerGid: string) {
+  const customer = await fetchCustomerIdentity(admin, customerGid);
+  const email = normalizeEmail(customer?.email);
+  if (!customer?.id || !email) {
+    return { customer, portalUser: null, instituteKey: "", institute: null };
+  }
+
+  const portalUser = await findPortalUserForCustomer(shop, customer.id, email);
+  if (!portalUser?.id) {
+    return { customer, portalUser: null, instituteKey: "", institute: null };
+  }
 
   const instituteKey =
     getInstituteByLabel(portalUser?.institute || "")?.key ||
     getInstituteByEmail(portalUser?.schoolEmail || "")?.key ||
     getInstituteByEmail(portalUser?.email || "")?.key ||
-    getInstituteByEmail(email)?.key ||
     "";
+  const institute = getInstituteByKey(instituteKey);
 
-  if (!instituteKey || !customer?.id) {
-    return "";
+  if (!instituteKey || !institute) {
+    return { customer, portalUser, instituteKey: "", institute: null };
   }
 
-  if (portalUser?.id) {
-    try {
-      await linkPortalUserToCustomer({
-        shop,
-        portalUserId: portalUser.id,
-        customerId: customer.id,
-        customerGid: customer.id,
-      });
-    } catch (linkError) {
-      console.warn("[bundle-access] failed to link portal user to customer:", errorMessage(linkError));
-    }
+  try {
+    await linkPortalUserToCustomer({
+      shop,
+      portalUserId: portalUser.id,
+      customerId: customer.id,
+      customerGid: customer.id,
+    });
+  } catch (linkError) {
+    console.warn("[bundle-access] failed to link portal user to customer:", errorMessage(linkError));
   }
 
   try {
@@ -130,15 +165,13 @@ async function getCustomerInstituteKey(admin: GraphqlClient, shop: string, custo
     console.warn("[bundle-access] failed to persist customer institute metafield:", errorMessage(metafieldError));
   }
 
-  if (portalUser?.id) {
-    try {
-      await setCustomerPortalProfileMetafields(admin, customer.id, portalUser);
-    } catch (profileError) {
-      console.warn("[bundle-access] failed to persist customer profile metafields:", errorMessage(profileError));
-    }
+  try {
+    await setCustomerPortalProfileMetafields(admin, customer.id, portalUser);
+  } catch (profileError) {
+    console.warn("[bundle-access] failed to persist customer profile metafields:", errorMessage(profileError));
   }
 
-  return instituteKey;
+  return { customer, portalUser, instituteKey, institute };
 }
 
 function isProtectedCollection(collectionHandle: string) {
@@ -221,15 +254,18 @@ async function handle(request: Request) {
   }
 
   try {
-    const instituteKey = await getCustomerInstituteKey(admin, shop, buildCustomerGid(customerId));
-    const institute = getInstituteByKey(instituteKey);
-    const allowed = institute ? await isBundleVisibleForInstitute(shop, instituteKey) : false;
+    const { portalUser, instituteKey, institute } = await getCustomerBundleAccessProfile(
+      admin,
+      shop,
+      buildCustomerGid(customerId),
+    );
+    const allowed = Boolean(portalUser?.id && institute);
 
     return json({
       ok: true,
       allowed,
       protected: true,
-      reason: allowed ? "allowed" : institute ? "disabled_for_institute" : "no_institute",
+      reason: allowed ? "allowed" : portalUser?.id ? "no_institute" : "profile_not_found",
       collectionHandle,
       productHandle,
       customerId,

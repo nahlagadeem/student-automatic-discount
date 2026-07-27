@@ -507,8 +507,8 @@
           if (protectedHandle) {
             hidePageContent(
               access?.reason === "no_customer"
-                ? "Please sign in with your BISR account to view this page."
-                : "This page is only available to BISR customers.",
+                ? "Please sign in with your student account to view this page."
+                : "Complete your student profile before viewing this page.",
             );
 
             const returnUrl = encodeURIComponent(buildReturnUrl());
