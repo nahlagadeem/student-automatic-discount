@@ -10,6 +10,7 @@ import {
 import { getInstituteByEmail, getInstituteByKey, getInstituteByLabel } from "../institutes";
 import { buildCustomerGid, buildLegacyCustomerId, linkPortalUserToCustomer } from "../portal-user-links.server";
 import { setCustomerPortalProfileMetafields } from "../customer-profile-metafields.server";
+import { isBundleVisibleForInstitute } from "../bundle-visibility-rules.server";
 
 type GraphqlClient = {
   graphql: (query: string, opts?: { variables?: Record<string, unknown> }) => Promise<Response>;
@@ -261,16 +262,6 @@ async function handle(request: Request) {
     });
   }
 
-  return json({
-    ok: true,
-    allowed: true,
-    protected: true,
-    reason: "public_bundle_access_enabled",
-    collectionHandle,
-    productHandle,
-    customerId: customerId || null,
-  });
-
   if (!customerId) {
     return json({
       ok: true,
@@ -287,18 +278,20 @@ async function handle(request: Request) {
   const linkedPortalUser = await findPortalUserForCustomer(shop, customerGid, "");
   if (linkedPortalUser?.id) {
     const { instituteKey, institute } = resolvePortalUserInstitute(linkedPortalUser);
-    const allowed = Boolean(institute);
+    const isEnabled = instituteKey ? await isBundleVisibleForInstitute(shop, instituteKey) : false;
+    const allowed = Boolean(institute) && isEnabled;
 
     return json({
       ok: true,
       allowed,
       protected: true,
-      reason: allowed ? "allowed" : "no_institute",
+      reason: allowed ? "allowed" : institute ? "institute_disabled" : "no_institute",
       collectionHandle,
       productHandle,
       customerId,
       instituteKey: instituteKey || null,
       instituteLabel: institute?.label || null,
+      instituteBundleEnabled: institute ? isEnabled : null,
     });
   }
 
@@ -323,18 +316,26 @@ async function handle(request: Request) {
       shop,
       customerGid,
     );
-    const allowed = Boolean(institute);
+    const isEnabled = instituteKey ? await isBundleVisibleForInstitute(shop, instituteKey) : false;
+    const allowed = Boolean(institute) && isEnabled;
 
     return json({
       ok: true,
       allowed,
       protected: true,
-      reason: allowed ? "allowed" : portalUser?.id ? "no_institute" : "profile_not_found",
+      reason: allowed
+        ? "allowed"
+        : institute
+          ? "institute_disabled"
+          : portalUser?.id
+            ? "no_institute"
+            : "profile_not_found",
       collectionHandle,
       productHandle,
       customerId,
       instituteKey: instituteKey || null,
       instituteLabel: institute?.label || null,
+      instituteBundleEnabled: institute ? isEnabled : null,
     });
   } catch (error) {
     return json(

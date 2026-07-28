@@ -443,13 +443,27 @@
     const needsAccessCheck = Boolean(protectedRootHandle);
 
     if (needsAccessCheck) {
-      setBundleAccessAllowed(true);
-      unhideProtectedRoots();
+      setBundleAccessAllowed(false);
+      for (const entry of protectedRoots) {
+        setRootHidden(entry.root, true);
+      }
 
       try {
         const { collectionHandle, productHandle } = buildAccessCheckParams(protectedRootHandle);
-        await fetchCollectionAccess(config, collectionHandle, productHandle);
+        const accessPayload = await fetchCollectionAccess(config, collectionHandle, productHandle);
         if (currentToken !== requestToken) return;
+
+        if (!accessPayload || accessPayload.allowed !== true) {
+          setBundleAccessAllowed(false);
+          for (const entry of protectedRoots) {
+            setRootHidden(entry.root, true);
+          }
+
+          if (protectedHandle) {
+            window.location.replace("/");
+            return;
+          }
+        }
 
         setBundleAccessAllowed(true);
         unhideProtectedRoots();
@@ -466,8 +480,15 @@
         }
       } catch (error) {
         console.warn("[student-pricing] failed to verify bundle collection access", error);
-        setBundleAccessAllowed(true);
-        unhideProtectedRoots();
+        setBundleAccessAllowed(false);
+        for (const entry of protectedRoots) {
+          setRootHidden(entry.root, true);
+        }
+
+        if (protectedHandle) {
+          window.location.replace("/");
+          return;
+        }
       }
     }
 
