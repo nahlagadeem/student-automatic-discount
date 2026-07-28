@@ -111,7 +111,8 @@
         PROTECTED_PRODUCT_HANDLES.has(handle) || PROTECTED_COLLECTION_HANDLES.has(handle);
       if (!isProtected) continue;
 
-      const root = link.closest("header, nav, [role='navigation']")
+      const isNavigationLink = Boolean(link.closest("header, nav, [role='navigation']"));
+      const root = isNavigationLink
         ? link
         : link.closest(CARD_ROOT_SELECTOR) || link.parentElement || link;
       if (!(root instanceof HTMLElement)) continue;
