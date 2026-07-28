@@ -455,11 +455,8 @@
     const needsAccessCheck = Boolean(protectedRootHandle);
 
     if (needsAccessCheck) {
-      const customerId = getCustomerId(config);
-      if (!customerId) {
-        setBundleAccessAllowed(false);
-        hideProtectedRoots(protectedRoots);
-      }
+      setBundleAccessAllowed(false);
+      hideProtectedRoots(protectedRoots);
 
       try {
         const { collectionHandle, productHandle } = buildAccessCheckParams(protectedRootHandle);
