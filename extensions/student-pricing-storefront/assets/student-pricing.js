@@ -41,6 +41,10 @@
   let scanTimer = 0;
   let observer = null;
   let requestToken = 0;
+  let bundleAccessCache = {
+    key: "",
+    allowed: null
+  };
 
   function getConfig() {
     return document.querySelector(CONFIG_SELECTOR);
@@ -163,6 +167,14 @@
 
   function setBundleAccessAllowed(allowed) {
     document.documentElement.classList.toggle("student-pricing-bundle-access-allowed", Boolean(allowed));
+  }
+
+  function getBundleAccessCacheKey(config, handle) {
+    return [
+      getShopDomain(config),
+      getCustomerId(config),
+      String(handle || "").trim().toLowerCase()
+    ].join("::");
   }
 
   function buildAccessCheckParams(handle) {
@@ -456,46 +468,62 @@
     const needsAccessCheck = Boolean(protectedRootHandle);
 
     if (needsAccessCheck) {
-      setBundleAccessAllowed(false);
-      hideProtectedRoots(protectedRoots);
-
-      try {
-        const { collectionHandle, productHandle } = buildAccessCheckParams(protectedRootHandle);
-        const accessPayload = await fetchCollectionAccess(config, collectionHandle, productHandle);
-        if (currentToken !== requestToken) return;
-
-        if (!accessPayload || accessPayload.allowed !== true) {
-          setBundleAccessAllowed(false);
-          hideProtectedRoots(protectedRoots);
-
-          if (protectedHandle) {
-            window.location.replace("/");
-          }
-
-          return;
-        }
-
+      const accessCacheKey = getBundleAccessCacheKey(config, protectedRootHandle);
+      if (bundleAccessCache.key === accessCacheKey && bundleAccessCache.allowed === true) {
         setBundleAccessAllowed(true);
         unhideProtectedRoots();
-
-        if (protectedHandle) {
-          document.documentElement.classList.remove("student-pricing-pending");
-          const overlay = document.querySelector(".student-pricing-bundle-guard");
-          if (overlay instanceof HTMLElement) overlay.remove();
-          const target = document.querySelector("main") || document.querySelector("#MainContent") || document.body;
-          if (target instanceof HTMLElement) {
-            target.style.visibility = "";
-            target.style.pointerEvents = "";
-          }
-        }
-      } catch (error) {
-        console.warn("[student-pricing] failed to verify bundle collection access", error);
+      } else if (bundleAccessCache.key === accessCacheKey && bundleAccessCache.allowed === false) {
         setBundleAccessAllowed(false);
         hideProtectedRoots(protectedRoots);
 
         if (protectedHandle) {
           window.location.replace("/");
           return;
+        }
+      } else {
+        setBundleAccessAllowed(false);
+        hideProtectedRoots(protectedRoots);
+
+        try {
+          const { collectionHandle, productHandle } = buildAccessCheckParams(protectedRootHandle);
+          const accessPayload = await fetchCollectionAccess(config, collectionHandle, productHandle);
+
+          if (!accessPayload || accessPayload.allowed !== true) {
+            bundleAccessCache = { key: accessCacheKey, allowed: false };
+            setBundleAccessAllowed(false);
+            hideProtectedRoots(protectedRoots);
+
+            if (protectedHandle) {
+              window.location.replace("/");
+            }
+
+            return;
+          }
+
+          bundleAccessCache = { key: accessCacheKey, allowed: true };
+          setBundleAccessAllowed(true);
+          unhideProtectedRoots();
+
+          if (protectedHandle) {
+            document.documentElement.classList.remove("student-pricing-pending");
+            const overlay = document.querySelector(".student-pricing-bundle-guard");
+            if (overlay instanceof HTMLElement) overlay.remove();
+            const target = document.querySelector("main") || document.querySelector("#MainContent") || document.body;
+            if (target instanceof HTMLElement) {
+              target.style.visibility = "";
+              target.style.pointerEvents = "";
+            }
+          }
+        } catch (error) {
+          console.warn("[student-pricing] failed to verify bundle collection access", error);
+          bundleAccessCache = { key: accessCacheKey, allowed: false };
+          setBundleAccessAllowed(false);
+          hideProtectedRoots(protectedRoots);
+
+          if (protectedHandle) {
+            window.location.replace("/");
+            return;
+          }
         }
       }
     }
