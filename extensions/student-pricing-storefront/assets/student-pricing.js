@@ -14,9 +14,13 @@
     "[data-card-wrapper]",
     ".card-wrapper",
     ".grid__item",
+    "[class*='grid__item']",
     ".product-item",
     ".product-card",
     "product-card",
+    ".collection-list__item",
+    ".collection-card",
+    "[class*='collection-card']",
     "li",
     "article"
   ].join(",");
@@ -107,7 +111,9 @@
         PROTECTED_PRODUCT_HANDLES.has(handle) || PROTECTED_COLLECTION_HANDLES.has(handle);
       if (!isProtected) continue;
 
-      const root = link.closest("header, nav, [role='navigation']") ? link : link.closest(CARD_ROOT_SELECTOR) || link.parentElement || link;
+      const root = link.closest("header, nav, [role='navigation']")
+        ? link
+        : link.closest(CARD_ROOT_SELECTOR) || link.parentElement || link;
       if (!(root instanceof HTMLElement)) continue;
 
       if (!root.dataset.studentPricingProtectedKey) {
@@ -140,6 +146,12 @@
     root.style.display = originalDisplay;
     root.removeAttribute("data-student-pricing-protected-hidden");
     delete root.dataset.studentPricingOriginalDisplay;
+  }
+
+  function hideProtectedRoots(roots) {
+    for (const entry of roots) {
+      setRootHidden(entry.root, true);
+    }
   }
 
   function unhideProtectedRoots() {
@@ -443,9 +455,10 @@
     const needsAccessCheck = Boolean(protectedRootHandle);
 
     if (needsAccessCheck) {
-      setBundleAccessAllowed(false);
-      for (const entry of protectedRoots) {
-        setRootHidden(entry.root, true);
+      const customerId = getCustomerId(config);
+      if (!customerId) {
+        setBundleAccessAllowed(false);
+        hideProtectedRoots(protectedRoots);
       }
 
       try {
@@ -455,9 +468,7 @@
 
         if (!accessPayload || accessPayload.allowed !== true) {
           setBundleAccessAllowed(false);
-          for (const entry of protectedRoots) {
-            setRootHidden(entry.root, true);
-          }
+          hideProtectedRoots(protectedRoots);
 
           if (protectedHandle) {
             window.location.replace("/");
@@ -481,9 +492,7 @@
       } catch (error) {
         console.warn("[student-pricing] failed to verify bundle collection access", error);
         setBundleAccessAllowed(false);
-        for (const entry of protectedRoots) {
-          setRootHidden(entry.root, true);
-        }
+        hideProtectedRoots(protectedRoots);
 
         if (protectedHandle) {
           window.location.replace("/");

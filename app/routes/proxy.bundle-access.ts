@@ -111,7 +111,6 @@ function resolvePortalUserInstitute(portalUser: {
   const instituteKey =
     getInstituteByLabel(portalUser?.institute || "")?.key ||
     getInstituteByEmail(portalUser?.schoolEmail || "")?.key ||
-    getInstituteByEmail(portalUser?.email || "")?.key ||
     "";
 
   return {
@@ -135,17 +134,11 @@ async function getCustomerBundleAccessProfile(admin: GraphqlClient, shop: string
 
   const portalUser = await findPortalUserForCustomer(shop, customer.id, email);
   if (!portalUser?.id) {
-    const profileDomain = String(customer?.portalEmailDomain?.value || "").trim();
-    const institute =
-      getInstituteByKey(customer?.instituteKey?.value || "") ||
-      getInstituteByLabel(customer?.portalInstituteName?.value || "") ||
-      getInstituteByEmail(profileDomain ? `student${profileDomain}` : "");
-
     return {
       customer,
       portalUser: null,
-      instituteKey: institute?.key || "",
-      institute: institute || null,
+      instituteKey: "",
+      institute: null,
     };
   }
 

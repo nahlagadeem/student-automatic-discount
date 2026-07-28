@@ -85,7 +85,7 @@ export default function BundleVisibility() {
     <s-page heading="Bundle Visibility">
       <s-section heading="Institution access">
         <s-paragraph>
-          Bundle pages are visible to enabled institutes by default. Customers without a known institute remain blocked.
+          Bundle pages are visible only to institutes explicitly enabled here. Customers without a known institute remain blocked.
         </s-paragraph>
         <s-stack gap="base">
           {(bundleVisibilityRules ?? []).map((rule) => (

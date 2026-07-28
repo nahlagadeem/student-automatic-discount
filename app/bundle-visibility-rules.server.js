@@ -8,7 +8,7 @@ export async function ensureBundleVisibilityRuleTable() {
       "shop" TEXT NOT NULL,
       "instituteKey" TEXT NOT NULL,
       "instituteLabel" TEXT NOT NULL,
-      "isEnabled" BOOLEAN NOT NULL DEFAULT true,
+      "isEnabled" BOOLEAN NOT NULL DEFAULT false,
       "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
       "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -36,7 +36,7 @@ export async function listBundleVisibilityRules(shop) {
     ...institute,
     isEnabled: overridesByInstituteKey.has(institute.key)
       ? overridesByInstituteKey.get(institute.key)
-      : true,
+      : false,
     isDefault: !overridesByInstituteKey.has(institute.key),
   }));
 }
@@ -94,6 +94,6 @@ export async function isBundleVisibleForInstitute(shop, instituteKey) {
     LIMIT 1
   `;
 
-  if (!rows.length) return true;
+  if (!rows.length) return false;
   return Boolean(rows[0].isEnabled);
 }
