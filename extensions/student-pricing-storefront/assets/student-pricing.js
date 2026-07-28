@@ -470,8 +470,9 @@
 
           if (protectedHandle) {
             window.location.replace("/");
-            return;
           }
+
+          return;
         }
 
         setBundleAccessAllowed(true);

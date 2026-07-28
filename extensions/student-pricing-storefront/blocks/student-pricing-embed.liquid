@@ -7,8 +7,20 @@
 
 <style>
   html:not(.student-pricing-bundle-access-allowed) a[href*="/collections/all-bundles"],
-  html:not(.student-pricing-bundle-access-allowed) a[href*="/collections/bundle"],
-  html:not(.student-pricing-bundle-access-allowed) a[href*="/products/primary-years-bundle"] {
+  html:not(.student-pricing-bundle-access-allowed) a[href*="/collections/bundle"] {
+    display: none !important;
+  }
+
+  html:not(.student-pricing-bundle-access-allowed) main li:has(a[href*="/products/primary-years-bundle"]),
+  html:not(.student-pricing-bundle-access-allowed) main .grid__item:has(a[href*="/products/primary-years-bundle"]),
+  html:not(.student-pricing-bundle-access-allowed) main [class*="grid__item"]:has(a[href*="/products/primary-years-bundle"]),
+  html:not(.student-pricing-bundle-access-allowed) main [data-product-card]:has(a[href*="/products/primary-years-bundle"]),
+  html:not(.student-pricing-bundle-access-allowed) main [data-card-wrapper]:has(a[href*="/products/primary-years-bundle"]),
+  html:not(.student-pricing-bundle-access-allowed) #MainContent li:has(a[href*="/products/primary-years-bundle"]),
+  html:not(.student-pricing-bundle-access-allowed) #MainContent .grid__item:has(a[href*="/products/primary-years-bundle"]),
+  html:not(.student-pricing-bundle-access-allowed) #MainContent [class*="grid__item"]:has(a[href*="/products/primary-years-bundle"]),
+  html:not(.student-pricing-bundle-access-allowed) #MainContent [data-product-card]:has(a[href*="/products/primary-years-bundle"]),
+  html:not(.student-pricing-bundle-access-allowed) #MainContent [data-card-wrapper]:has(a[href*="/products/primary-years-bundle"]) {
     display: none !important;
   }
 </style>
