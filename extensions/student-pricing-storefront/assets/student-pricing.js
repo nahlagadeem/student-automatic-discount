@@ -35,8 +35,10 @@
   const LIMITED_OFFER_HANDLE = "iphone-17e";
   const LIMITED_OFFER_TITLE = "13-inch macbook neo";
   const LIMITED_OFFER_STORAGE = "256gb no touch id";
-  const PROTECTED_COLLECTION_HANDLES = new Set(["bundle", "all-bundles"]);
-  const PROTECTED_PRODUCT_HANDLES = new Set(["primary-years-bundle"]);
+  const FALLBACK_PROTECTED_COLLECTION_HANDLES = ["bundle", "all-bundles"];
+  const FALLBACK_PROTECTED_PRODUCT_HANDLES = ["primary-years-bundle"];
+  let PROTECTED_COLLECTION_HANDLES = new Set(FALLBACK_PROTECTED_COLLECTION_HANDLES);
+  let PROTECTED_PRODUCT_HANDLES = new Set(FALLBACK_PROTECTED_PRODUCT_HANDLES);
 
   let scanTimer = 0;
   let observer = null;
@@ -73,6 +75,28 @@
     return String((config && config.dataset && config.dataset.customerId) || "").trim();
   }
 
+  function parseHandleList(value, fallbackHandles) {
+    const handles = String(value || "")
+      .split(",")
+      .map((handle) => handle.trim().toLowerCase())
+      .filter(Boolean);
+
+    return new Set(handles.length ? handles : fallbackHandles);
+  }
+
+  function configureProtectedHandles(config) {
+    if (!(config instanceof HTMLElement)) return;
+
+    PROTECTED_COLLECTION_HANDLES = parseHandleList(
+      config.dataset.protectedCollectionHandles,
+      FALLBACK_PROTECTED_COLLECTION_HANDLES
+    );
+    PROTECTED_PRODUCT_HANDLES = parseHandleList(
+      config.dataset.protectedProductHandles,
+      FALLBACK_PROTECTED_PRODUCT_HANDLES
+    );
+  }
+
   function getProtectedCollectionHandle() {
     const handle = extractCollectionHandleFromPath(window.location.pathname);
     if (!handle) return "";
@@ -101,6 +125,8 @@
     const roots = [];
     const seen = new Set();
     const links = document.querySelectorAll("a[href*='/products/'], a[href*='/collections/']");
+    const currentCollectionHandle = extractCollectionHandleFromPath(window.location.pathname);
+    const isBundleCollectionPage = PROTECTED_COLLECTION_HANDLES.has(currentCollectionHandle);
 
     for (const link of links) {
       if (!(link instanceof HTMLAnchorElement)) continue;
@@ -108,7 +134,9 @@
       if (!handle) continue;
 
       const isProtected =
-        PROTECTED_PRODUCT_HANDLES.has(handle) || PROTECTED_COLLECTION_HANDLES.has(handle);
+        PROTECTED_PRODUCT_HANDLES.has(handle) ||
+        PROTECTED_COLLECTION_HANDLES.has(handle) ||
+        (isBundleCollectionPage && !PROTECTED_COLLECTION_HANDLES.has(handle));
       if (!isProtected) continue;
 
       const isNavigationLink = Boolean(link.closest("header, nav, [role='navigation']"));
@@ -155,12 +183,6 @@
     }
   }
 
-  function unhideProtectedRoots() {
-    for (const entry of getProtectedRoots()) {
-      setRootHidden(entry.root, false);
-    }
-  }
-
   function setBundleAccessAllowed(allowed) {
     document.documentElement.classList.toggle("student-pricing-bundle-access-allowed", Boolean(allowed));
   }
@@ -172,7 +194,7 @@
     };
 
     if (!handle) return params;
-    if (PROTECTED_PRODUCT_HANDLES.has(handle)) {
+    if (!PROTECTED_COLLECTION_HANDLES.has(handle)) {
       params.productHandle = handle;
       return params;
     }
@@ -446,42 +468,54 @@
     const currentToken = ++requestToken;
     const config = getConfig();
     if (!(config instanceof HTMLElement)) return;
+    configureProtectedHandles(config);
 
     const targets = collectTargets();
     const protectedCollectionHandle = getProtectedCollectionHandle();
     const protectedProductHandle = getProtectedProductHandle();
     const protectedHandle = protectedCollectionHandle || protectedProductHandle;
     const protectedRoots = getProtectedRoots();
-    const protectedRootHandle = protectedHandle || protectedRoots[0]?.handle || "";
-    const needsAccessCheck = Boolean(protectedRootHandle);
+    const protectedRootEntries = protectedRoots.filter((entry) => entry.handle !== protectedHandle);
+    const needsAccessCheck = Boolean(protectedHandle || protectedRootEntries.length);
 
     if (needsAccessCheck) {
       try {
-        const { collectionHandle, productHandle } = buildAccessCheckParams(protectedRootHandle);
-        const accessPayload = await fetchCollectionAccess(config, collectionHandle, productHandle);
+        if (protectedHandle) {
+          const { collectionHandle, productHandle } = buildAccessCheckParams(protectedHandle);
+          const accessPayload = await fetchCollectionAccess(config, collectionHandle, productHandle);
 
-        if (!accessPayload || accessPayload.allowed !== true) {
-          setBundleAccessAllowed(false);
-          hideProtectedRoots(protectedRoots);
+          if (!accessPayload || accessPayload.allowed !== true) {
+            setBundleAccessAllowed(false);
+            hideProtectedRoots(protectedRoots);
 
-          if (protectedHandle) {
-            window.location.replace("/");
+            if (protectedProductHandle) {
+              window.location.replace("/");
+            }
+
+            if (protectedProductHandle) return;
+          } else {
+            setBundleAccessAllowed(true);
+
+            if (protectedHandle) {
+              document.documentElement.classList.remove("student-pricing-pending");
+              const overlay = document.querySelector(".student-pricing-bundle-guard");
+              if (overlay instanceof HTMLElement) overlay.remove();
+              const target = document.querySelector("main") || document.querySelector("#MainContent") || document.body;
+              if (target instanceof HTMLElement) {
+                target.style.visibility = "";
+                target.style.pointerEvents = "";
+              }
+            }
           }
-
-          return;
         }
 
-        setBundleAccessAllowed(true);
-        unhideProtectedRoots();
-
-        if (protectedHandle) {
-          document.documentElement.classList.remove("student-pricing-pending");
-          const overlay = document.querySelector(".student-pricing-bundle-guard");
-          if (overlay instanceof HTMLElement) overlay.remove();
-          const target = document.querySelector("main") || document.querySelector("#MainContent") || document.body;
-          if (target instanceof HTMLElement) {
-            target.style.visibility = "";
-            target.style.pointerEvents = "";
+        for (const entry of protectedRootEntries) {
+          const { collectionHandle, productHandle } = buildAccessCheckParams(entry.handle);
+          const accessPayload = await fetchCollectionAccess(config, collectionHandle, productHandle);
+          if (!accessPayload || accessPayload.allowed !== true) {
+            setRootHidden(entry.root, true);
+          } else {
+            setRootHidden(entry.root, false);
           }
         }
       } catch (error) {

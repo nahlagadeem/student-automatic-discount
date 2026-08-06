@@ -10,14 +10,16 @@ import {
 import { getInstituteByEmail, getInstituteByKey, getInstituteByLabel } from "../institutes";
 import { buildCustomerGid, buildLegacyCustomerId, linkPortalUserToCustomer } from "../portal-user-links.server";
 import { setCustomerPortalProfileMetafields } from "../customer-profile-metafields.server";
-import { isBundleVisibleForInstitute } from "../bundle-visibility-rules.server";
+import {
+  hasAnyVisibleBundleForInstitute,
+  isBundleVisibleForInstitute,
+} from "../bundle-visibility-rules.server";
 
 type GraphqlClient = {
   graphql: (query: string, opts?: { variables?: Record<string, unknown> }) => Promise<Response>;
 };
 
 const BISR_COLLECTION_HANDLES = new Set(["bundle", "all-bundles"]);
-const BISR_PRODUCT_HANDLES = new Set(["primary-years-bundle"]);
 
 function normalizeEmail(input: string | null | undefined) {
   return String(input || "").trim().toLowerCase();
@@ -208,7 +210,16 @@ function isProtectedCollection(collectionHandle: string) {
 }
 
 function isProtectedProduct(productHandle: string) {
-  return BISR_PRODUCT_HANDLES.has(String(productHandle || "").trim().toLowerCase());
+  return Boolean(String(productHandle || "").trim());
+}
+
+async function isRequestedBundleVisible(shop: string, instituteKey: string, productHandle: string) {
+  const normalizedProductHandle = String(productHandle || "").trim().toLowerCase();
+  if (normalizedProductHandle) {
+    return isBundleVisibleForInstitute(shop, instituteKey, normalizedProductHandle);
+  }
+
+  return hasAnyVisibleBundleForInstitute(shop, instituteKey);
 }
 
 async function handle(request: Request) {
@@ -271,7 +282,9 @@ async function handle(request: Request) {
   const linkedPortalUser = await findPortalUserForCustomer(shop, customerGid, "");
   if (linkedPortalUser?.id) {
     const { instituteKey, institute } = resolvePortalUserInstitute(linkedPortalUser);
-    const isEnabled = instituteKey ? await isBundleVisibleForInstitute(shop, instituteKey) : false;
+    const isEnabled = instituteKey
+      ? await isRequestedBundleVisible(shop, instituteKey, productHandle)
+      : false;
     const allowed = Boolean(institute) && isEnabled;
 
     return json({
@@ -309,7 +322,9 @@ async function handle(request: Request) {
       shop,
       customerGid,
     );
-    const isEnabled = instituteKey ? await isBundleVisibleForInstitute(shop, instituteKey) : false;
+    const isEnabled = instituteKey
+      ? await isRequestedBundleVisible(shop, instituteKey, productHandle)
+      : false;
     const allowed = Boolean(institute) && isEnabled;
 
     return json({

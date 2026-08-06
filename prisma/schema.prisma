@@ -103,11 +103,14 @@ model AutomaticDiscountConfig {
 model BundleVisibilityRule {
   id             Int      @id @default(autoincrement())
   shop           String
+  bundleProductId String?
+  bundleHandle   String   @default("primary-years-bundle")
+  bundleTitle    String   @default("Primary Years Bundle")
   instituteKey   String
   instituteLabel String
-  isEnabled      Boolean  @default(true)
+  isEnabled      Boolean  @default(false)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  @@unique([shop, instituteKey])
+  @@unique([shop, bundleHandle, instituteKey])
 }
