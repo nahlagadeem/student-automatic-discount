@@ -11,20 +11,47 @@ import { INSTITUTES } from "../institutes";
 import { authenticate } from "../shopify.server";
 import { runAdminGraphql } from "../student-discount.server";
 
-const ALL_BUNDLES_COLLECTION_ID = "gid://shopify/Collection/458566009050";
+const LEGACY_ALL_BUNDLES_COLLECTION_ID = "gid://shopify/Collection/458566009050";
+const ALL_BUNDLES_COLLECTION_HANDLE = "all-bundles";
 const FALLBACK_BUNDLE = {
   productId: "",
   handle: "primary-years-bundle",
   title: "Primary Years Bundle",
 };
 
+function normalizeBundleProduct(product) {
+  return {
+    productId: String(product?.id || "").trim(),
+    handle: String(product?.handle || "").trim().toLowerCase(),
+    title: String(product?.title || "").trim(),
+  };
+}
+
+function mergeBundleProducts(...productGroups) {
+  const byHandle = new Map();
+
+  for (const group of productGroups) {
+    for (const product of group ?? []) {
+      const normalized = normalizeBundleProduct(product);
+      if (!normalized.handle || !normalized.title) continue;
+      if (!byHandle.has(normalized.handle)) {
+        byHandle.set(normalized.handle, normalized);
+      }
+    }
+  }
+
+  return Array.from(byHandle.values()).sort((left, right) =>
+    left.title.localeCompare(right.title),
+  );
+}
+
 async function fetchBundleProducts(admin) {
   try {
     const data = await runAdminGraphql(
       admin,
       `#graphql
-        query BundleProducts($id: ID!) {
-          collection(id: $id) {
+        query BundleProducts($legacyCollectionId: ID!, $collectionQuery: String!, $productQuery: String!) {
+          legacyCollection: collection(id: $legacyCollectionId) {
             products(first: 250, sortKey: TITLE) {
               nodes {
                 id
@@ -33,18 +60,38 @@ async function fetchBundleProducts(admin) {
               }
             }
           }
+          handleCollections: collections(first: 1, query: $collectionQuery) {
+            nodes {
+              products(first: 250, sortKey: TITLE) {
+                nodes {
+                  id
+                  title
+                  handle
+                }
+              }
+            }
+          }
+          searchedProducts: products(first: 250, sortKey: TITLE, query: $productQuery) {
+            nodes {
+              id
+              title
+              handle
+            }
+          }
         }
       `,
-      { id: ALL_BUNDLES_COLLECTION_ID },
+      {
+        legacyCollectionId: LEGACY_ALL_BUNDLES_COLLECTION_ID,
+        collectionQuery: `handle:${ALL_BUNDLES_COLLECTION_HANDLE}`,
+        productQuery: "bundle",
+      },
     );
 
-    const products = (data?.collection?.products?.nodes ?? [])
-      .map((product) => ({
-        productId: String(product?.id || "").trim(),
-        handle: String(product?.handle || "").trim().toLowerCase(),
-        title: String(product?.title || "").trim(),
-      }))
-      .filter((product) => product.handle && product.title);
+    const products = mergeBundleProducts(
+      data?.legacyCollection?.products?.nodes,
+      data?.handleCollections?.nodes?.[0]?.products?.nodes,
+      data?.searchedProducts?.nodes,
+    );
 
     return products.length ? products : [FALLBACK_BUNDLE];
   } catch (error) {
@@ -73,10 +120,18 @@ function summarizeActionResult(data) {
 export const loader = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
   await ensureBundleVisibilityRuleTable();
+  const savedRules = await listSavedBundleVisibilityRules(session.shop);
+  const savedBundles = mergeBundleProducts(
+    savedRules.map((rule) => ({
+      id: rule.bundleProductId,
+      title: rule.bundleTitle,
+      handle: rule.bundleHandle,
+    })),
+  );
 
   return {
-    bundles: await fetchBundleProducts(admin),
-    savedRules: await listSavedBundleVisibilityRules(session.shop),
+    bundles: mergeBundleProducts(await fetchBundleProducts(admin), savedBundles),
+    savedRules,
   };
 };
 
@@ -165,7 +220,7 @@ export default function BundleVisibility() {
       <s-section heading="Choose bundle">
         <s-stack gap="base">
           <s-paragraph>
-            Select a product from the All Bundles collection, then enable or disable institute access for that bundle.
+            Select a bundle product, then enable or disable institute access for that bundle.
           </s-paragraph>
           <label>
             <div style={{ marginBottom: "0.35rem", fontWeight: 600 }}>Bundle</div>
