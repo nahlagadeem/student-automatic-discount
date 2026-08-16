@@ -50,7 +50,7 @@ async function fetchBundleProducts(admin) {
     const data = await runAdminGraphql(
       admin,
       `#graphql
-        query BundleProducts($legacyCollectionId: ID!, $collectionQuery: String!, $productQuery: String!) {
+        query BundleProducts($legacyCollectionId: ID!, $collectionQuery: String!) {
           legacyCollection: collection(id: $legacyCollectionId) {
             products(first: 250, sortKey: TITLE) {
               nodes {
@@ -71,26 +71,17 @@ async function fetchBundleProducts(admin) {
               }
             }
           }
-          searchedProducts: products(first: 250, sortKey: TITLE, query: $productQuery) {
-            nodes {
-              id
-              title
-              handle
-            }
-          }
         }
       `,
       {
         legacyCollectionId: LEGACY_ALL_BUNDLES_COLLECTION_ID,
         collectionQuery: `handle:${ALL_BUNDLES_COLLECTION_HANDLE}`,
-        productQuery: "bundle",
       },
     );
 
     const products = mergeBundleProducts(
       data?.legacyCollection?.products?.nodes,
       data?.handleCollections?.nodes?.[0]?.products?.nodes,
-      data?.searchedProducts?.nodes,
     );
 
     return products.length ? products : [FALLBACK_BUNDLE];
@@ -121,16 +112,9 @@ export const loader = async ({ request }) => {
   const { session, admin } = await authenticate.admin(request);
   await ensureBundleVisibilityRuleTable();
   const savedRules = await listSavedBundleVisibilityRules(session.shop);
-  const savedBundles = mergeBundleProducts(
-    savedRules.map((rule) => ({
-      id: rule.bundleProductId,
-      title: rule.bundleTitle,
-      handle: rule.bundleHandle,
-    })),
-  );
 
   return {
-    bundles: mergeBundleProducts(await fetchBundleProducts(admin), savedBundles),
+    bundles: await fetchBundleProducts(admin),
     savedRules,
   };
 };
@@ -220,7 +204,7 @@ export default function BundleVisibility() {
       <s-section heading="Choose bundle">
         <s-stack gap="base">
           <s-paragraph>
-            Select a bundle product, then enable or disable institute access for that bundle.
+            Select a product from the All Bundles collection, then enable or disable institute access for that bundle.
           </s-paragraph>
           <label>
             <div style={{ marginBottom: "0.35rem", fontWeight: 600 }}>Bundle</div>
