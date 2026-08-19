@@ -28,19 +28,34 @@ async function getCustomerPortalProfile(customerId) {
       query CustomerPortalProfile($id: ID!) {
         customer(id: $id) {
           id
-          fullName: metafield(namespace: "$app", key: "portal_full_name") {
+          fullName: metafield(namespace: "student_portal", key: "portal_full_name") {
             value
           }
-          instituteName: metafield(namespace: "$app", key: "portal_institute_name") {
+          appFullName: metafield(namespace: "$app", key: "portal_full_name") {
             value
           }
-          emailDomain: metafield(namespace: "$app", key: "portal_email_domain") {
+          instituteName: metafield(namespace: "student_portal", key: "portal_institute_name") {
             value
           }
-          role: metafield(namespace: "$app", key: "portal_role") {
+          appInstituteName: metafield(namespace: "$app", key: "portal_institute_name") {
             value
           }
-          phoneNumber: metafield(namespace: "$app", key: "portal_phone_number") {
+          emailDomain: metafield(namespace: "student_portal", key: "portal_email_domain") {
+            value
+          }
+          appEmailDomain: metafield(namespace: "$app", key: "portal_email_domain") {
+            value
+          }
+          role: metafield(namespace: "student_portal", key: "portal_role") {
+            value
+          }
+          appRole: metafield(namespace: "$app", key: "portal_role") {
+            value
+          }
+          phoneNumber: metafield(namespace: "student_portal", key: "portal_phone_number") {
+            value
+          }
+          appPhoneNumber: metafield(namespace: "$app", key: "portal_phone_number") {
             value
           }
         }
@@ -50,16 +65,17 @@ async function getCustomerPortalProfile(customerId) {
   );
 
   const customer = result?.data?.customer || null;
-  const valueFor = (fieldName) => String(customer?.[fieldName]?.value || "").trim();
+  const valueFor = (fieldName, fallbackFieldName) =>
+    String(customer?.[fieldName]?.value || customer?.[fallbackFieldName]?.value || "").trim();
 
   return {
     errors: Array.isArray(result?.errors) ? result.errors : [],
     profile: {
-      fullName: valueFor("fullName"),
-      instituteName: valueFor("instituteName"),
-      emailDomain: valueFor("emailDomain"),
-      role: valueFor("role"),
-      phoneNumber: valueFor("phoneNumber"),
+      fullName: valueFor("fullName", "appFullName"),
+      instituteName: valueFor("instituteName", "appInstituteName"),
+      emailDomain: valueFor("emailDomain", "appEmailDomain"),
+      role: valueFor("role", "appRole"),
+      phoneNumber: valueFor("phoneNumber", "appPhoneNumber"),
     },
   };
 }
