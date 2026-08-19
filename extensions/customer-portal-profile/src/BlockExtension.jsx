@@ -10,6 +10,7 @@ function getSelectedCustomerId() {
 
 function emptyProfile() {
   return {
+    email: "",
     fullName: "",
     instituteName: "",
     emailDomain: "",
@@ -28,6 +29,7 @@ async function getCustomerPortalProfile(customerId) {
       query CustomerPortalProfile($id: ID!) {
         customer(id: $id) {
           id
+          email
           fullName: metafield(namespace: "student_portal", key: "portal_full_name") {
             value
           }
@@ -71,6 +73,7 @@ async function getCustomerPortalProfile(customerId) {
   return {
     errors: Array.isArray(result?.errors) ? result.errors : [],
     profile: {
+      email: String(customer?.email || "").trim(),
       fullName: valueFor("fullName", "appFullName"),
       instituteName: valueFor("instituteName", "appInstituteName"),
       emailDomain: valueFor("emailDomain", "appEmailDomain"),
@@ -132,6 +135,7 @@ function Extension() {
 
   const fields = useMemo(
     () => [
+      {label: i18n.translate("email"), value: String(profile?.email || "").trim()},
       {label: i18n.translate("fullName"), value: String(profile?.fullName || "").trim()},
       {label: i18n.translate("institute"), value: String(profile?.instituteName || "").trim()},
       {label: i18n.translate("domain"), value: String(profile?.emailDomain || "").trim()},
@@ -141,7 +145,9 @@ function Extension() {
     [i18n, profile],
   );
 
-  const hasData = fields.some((field) => field.value);
+  const hasEducationalProfile = fields
+    .filter((field) => field.label !== i18n.translate("email"))
+    .some((field) => field.value);
   const errorMessage = Array.isArray(errors)
     ? errors.map((error) => String(error?.message || "").trim()).filter(Boolean).join("; ")
     : "";
@@ -157,7 +163,7 @@ function Extension() {
             <s-text>{i18n.translate("loadError", {message: errorMessage})}</s-text>
           </s-banner>
         ) : null}
-        {!isLoading && !errorMessage && hasData ? (
+        {!isLoading && !errorMessage && hasEducationalProfile ? (
           fields.map((field) => (
             <s-box key={field.label} padding="base" borderWidth="base" borderRadius="base">
               <s-stack direction="block" gap="tight">
@@ -167,8 +173,16 @@ function Extension() {
             </s-box>
           ))
         ) : null}
-        {!isLoading && !errorMessage && !hasData ? (
+        {!isLoading && !errorMessage && !hasEducationalProfile ? (
           <s-stack direction="block" gap="tight">
+            {profile?.email ? (
+              <s-box padding="base" borderWidth="base" borderRadius="base">
+                <s-stack direction="block" gap="tight">
+                  <s-text type="strong">{i18n.translate("email")}</s-text>
+                  <s-text>{profile.email}</s-text>
+                </s-stack>
+              </s-box>
+            ) : null}
             <s-text type="strong">{i18n.translate("emptyHeading")}</s-text>
             <s-text>{i18n.translate("emptyBody", {customerId})}</s-text>
           </s-stack>

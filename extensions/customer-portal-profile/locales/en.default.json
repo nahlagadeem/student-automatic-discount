@@ -1,6 +1,7 @@
 {
   "name": "Portal Profile",
   "blockHeading": "Portal Profile",
+  "email": "Email",
   "fullName": "Full name",
   "institute": "Institute",
   "domain": "Email domain",
@@ -8,7 +9,7 @@
   "phone": "Phone number",
   "loading": "Loading portal profile...",
   "notAvailable": "Not available",
-  "emptyHeading": "The portal profile is not available.",
-  "emptyBody": "",
+  "emptyHeading": "Educational profile not completed yet.",
+  "emptyBody": "This customer has not completed the educational profile step.",
   "loadError": "Failed to load portal profile: {{message}}"
 }
