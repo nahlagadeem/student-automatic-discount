@@ -710,14 +710,7 @@ export async function syncPortalUsersToCustomerTags({ admin, shop, rules }) {
     ),
   );
 
-  if (!activeInstituteLabels.length) {
-    return { syncedCustomerCount: 0, syncedUserCount: 0 };
-  }
-
   const portalUsers = await prisma.portalUser.findMany({
-    where: {
-      institute: { in: activeInstituteLabels },
-    },
       select: {
         id: true,
         fullName: true,
@@ -731,6 +724,7 @@ export async function syncPortalUsersToCustomerTags({ admin, shop, rules }) {
     });
 
   const customerAssignments = new Map();
+  const activeInstituteLabelSet = new Set(activeInstituteLabels);
 
   for (const user of portalUsers) {
     const institute = getInstituteByLabel(user.institute);
@@ -743,7 +737,10 @@ export async function syncPortalUsersToCustomerTags({ admin, shop, rules }) {
     for (const email of emails) {
       const customerIds = await findCustomerIdsByEmail(admin, email);
       for (const customerId of customerIds) {
-        customerAssignments.set(customerId, { instituteKey: institute.key, portalUser: user });
+        customerAssignments.set(customerId, {
+          instituteKey: activeInstituteLabelSet.has(user.institute) ? institute.key : "",
+          portalUser: user,
+        });
         await linkPortalUserToCustomer({
           shop,
           portalUserId: user.id,
@@ -755,7 +752,9 @@ export async function syncPortalUsersToCustomerTags({ admin, shop, rules }) {
 
   for (const [customerId, assignment] of customerAssignments.entries()) {
     const { instituteKey, portalUser } = assignment;
-    await setCustomerInstituteMetafield(admin, customerId, instituteKey);
+    if (instituteKey) {
+      await setCustomerInstituteMetafield(admin, customerId, instituteKey);
+    }
     await setCustomerPortalProfileMetafields(admin, customerId, portalUser);
   }
 

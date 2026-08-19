@@ -1,6 +1,6 @@
 import { getInstituteByEmail, getInstituteByLabel } from "./institutes";
 
-export const CUSTOMER_PROFILE_NAMESPACE = "$app";
+export const CUSTOMER_PROFILE_NAMESPACE = "student_portal";
 export const CUSTOMER_PROFILE_KEYS = {
   fullName: "portal_full_name",
   instituteName: "portal_institute_name",
