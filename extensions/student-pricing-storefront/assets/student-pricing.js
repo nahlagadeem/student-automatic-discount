@@ -44,6 +44,19 @@
     "b",
     "div"
   ].join(",");
+  const APPLECARE_ROOT_SELECTOR = [
+    "[class*='applecare']",
+    "[class*='apple-care']",
+    "[id*='applecare']",
+    "[id*='apple-care']",
+    "[data-applecare]",
+    "[data-apple-care]",
+    "section",
+    "article",
+    "form",
+    "div",
+    "li"
+  ].join(",");
   const FALLBACK_PROTECTED_COLLECTION_HANDLES = ["bundle", "all-bundles"];
   const FALLBACK_PROTECTED_PRODUCT_HANDLES = ["primary-years-bundle"];
   let PROTECTED_COLLECTION_HANDLES = new Set(FALLBACK_PROTECTED_COLLECTION_HANDLES);
@@ -508,6 +521,54 @@
     }
   }
 
+  async function fetchCartAppleCareAmount() {
+    const root =
+      (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) ||
+      "/";
+
+    const response = await fetch(`${root}cart.js`, {
+      method: "GET",
+      credentials: "same-origin",
+      headers: { Accept: "application/json" }
+    });
+
+    if (!response.ok) return null;
+
+    const cart = await response.json().catch(() => null);
+    const items = Array.isArray(cart && cart.items) ? cart.items : [];
+    const appleCareItem = items.find((item) => {
+      const title = `${item.product_title || ""} ${item.title || ""} ${item.variant_title || ""}`;
+      return APPLECARE_TEXT_PATTERN.test(title);
+    });
+
+    if (!appleCareItem) return null;
+
+    const quantity = Number(appleCareItem.quantity) || 1;
+    const cents =
+      Number.isFinite(Number(appleCareItem.final_line_price)) && Number(appleCareItem.final_line_price) > 0
+        ? Number(appleCareItem.final_line_price) / quantity
+        : Number.isFinite(Number(appleCareItem.final_price)) && Number(appleCareItem.final_price) > 0
+          ? Number(appleCareItem.final_price)
+          : Number.isFinite(Number(appleCareItem.price)) && Number(appleCareItem.price) > 0
+            ? Number(appleCareItem.price)
+            : 0;
+
+    const amount = cents / 100;
+    return Number.isFinite(amount) && amount > 0 ? amount : null;
+  }
+
+  function applyAppleCareCartAmount(targets, amount) {
+    if (!Number.isFinite(amount) || amount <= 0) return;
+
+    for (const target of targets) {
+      if (!target.appleCareFallback) continue;
+      for (const priceElement of target.priceElements) {
+        setPriceElementAmount(priceElement, amount);
+        removePreview(priceElement);
+      }
+    }
+  }
+
   function collectTargets() {
     const targets = [];
     const seen = new Set();
@@ -593,7 +654,7 @@
       targets.push({ handle, variantId, priceElements, key });
     }
 
-    const appleCareRoots = document.querySelectorAll(CARD_ROOT_SELECTOR);
+    const appleCareRoots = document.querySelectorAll(APPLECARE_ROOT_SELECTOR);
     for (const root of appleCareRoots) {
       if (!(root instanceof HTMLElement)) continue;
       const text = String(root.textContent || "");
@@ -605,6 +666,17 @@
 
       const priceElements = findAppleCarePriceElements(root);
       if (!priceElements.length) continue;
+
+      if (!handle && !variantId) {
+        if (!root.dataset.studentPricingKey) {
+          root.dataset.studentPricingKey = `applecare-cart-${seen.size + 1}`;
+        }
+        const key = `applecare-cart::${root.dataset.studentPricingKey}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        targets.push({ appleCareFallback: true, priceElements, key });
+        continue;
+      }
 
       const targetId = handle || variantId;
       if (!root.dataset.studentPricingKey) {
@@ -749,8 +821,19 @@
 
     if (!targets.length) return;
 
-    const handles = Array.from(new Set(targets.map((target) => target.handle).filter(Boolean)));
-    const variantIds = Array.from(new Set(targets.map((target) => target.variantId).filter(Boolean)));
+    const cartAppleCareAmount = await fetchCartAppleCareAmount().catch((error) => {
+      console.warn("[student-pricing] failed to fetch cart AppleCare price", error);
+      return null;
+    });
+    if (cartAppleCareAmount) {
+      applyAppleCareCartAmount(targets, cartAppleCareAmount);
+    }
+
+    const pricedTargets = targets.filter((target) => !target.appleCareFallback);
+    if (!pricedTargets.length) return;
+
+    const handles = Array.from(new Set(pricedTargets.map((target) => target.handle).filter(Boolean)));
+    const variantIds = Array.from(new Set(pricedTargets.map((target) => target.variantId).filter(Boolean)));
     let payload;
     try {
       payload = await fetchPricing(config, handles, variantIds);
@@ -775,7 +858,7 @@
     }
 
     try {
-      for (const target of targets) {
+      for (const target of pricedTargets) {
         const pricing =
           (target.handle && payload.byHandle[target.handle]) ||
           (target.variantId && payload.byVariantId && payload.byVariantId[target.variantId]);
