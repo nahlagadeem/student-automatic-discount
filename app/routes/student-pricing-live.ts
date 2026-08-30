@@ -27,6 +27,11 @@ type ProductNode = {
   } | null;
 };
 
+type ProductVariantNode = {
+  id?: string | null;
+  product?: ProductNode | null;
+};
+
 type ProductInfo = {
   id: string;
   collections: Set<string>;
@@ -69,6 +74,14 @@ function normalizeShopDomain(input: string | null | undefined): string {
 
 function normalizeHandle(input: string): string {
   return String(input || "").trim().toLowerCase();
+}
+
+function normalizeVariantId(input: string): string {
+  const raw = String(input || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("gid://shopify/ProductVariant/")) return raw;
+  const numericMatch = raw.match(/\d{8,}/);
+  return numericMatch ? `gid://shopify/ProductVariant/${numericMatch[0]}` : "";
 }
 
 function normalizeEmail(input: string | null | undefined): string {
@@ -350,6 +363,60 @@ async function getProductInfoMap(admin: GraphqlClient, handles: string[]) {
   return map;
 }
 
+async function getVariantProductInfoMap(admin: GraphqlClient, variantIds: string[]) {
+  const normalizedVariantIds = Array.from(
+    new Set(variantIds.map(normalizeVariantId).filter(Boolean)),
+  ).slice(0, 40);
+  const map = new Map<string, ProductInfo>();
+
+  if (!normalizedVariantIds.length) {
+    return map;
+  }
+
+  const data = await runAdminGraphql(
+    admin,
+    `#graphql
+      query GetVariantsForStudentPricing($ids: [ID!]!) {
+        nodes(ids: $ids) {
+          ... on ProductVariant {
+            id
+            product {
+              id
+              handle
+              title
+              collections(first: 25) {
+                nodes {
+                  id
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+    { ids: normalizedVariantIds },
+  );
+
+  for (const variant of (data?.nodes ?? []) as ProductVariantNode[]) {
+    const variantId = String(variant?.id || "").trim();
+    const product = variant?.product;
+    if (!variantId || !product?.id) continue;
+
+    const collections = new Set(
+      (product.collections?.nodes ?? [])
+        .map((collection) => String(collection?.id || "").trim())
+        .filter(Boolean),
+    );
+
+    map.set(variantId, {
+      id: String(product.id || "").trim(),
+      collections,
+    });
+  }
+
+  return map;
+}
+
 function getMatchingCategoryPercentage(
   productCollectionIds: Set<string>,
   rules: { categoryKey: string; percentage: number }[],
@@ -396,8 +463,12 @@ async function handle(request: Request) {
     .split(",")
     .map(normalizeHandle)
     .filter(Boolean);
+  const variantIds = String(url.searchParams.get("variant_ids") || "")
+    .split(",")
+    .map(normalizeVariantId)
+    .filter(Boolean);
 
-  if (!handles.length && !cleanupMode) {
+  if (!handles.length && !variantIds.length && !cleanupMode) {
     return json({ ok: true, byHandle: {}, eligible: false, reason: "no_handles", proxyVerified });
   }
 
@@ -496,6 +567,7 @@ async function handle(request: Request) {
     }
 
     const productInfoByHandle = await getProductInfoMap(admin, handles);
+    const productInfoByVariantId = await getVariantProductInfoMap(admin, variantIds);
     const limitedTimeOfferActive =
       isLimitedTimeProductOfferActive() && isEligibleForLimitedTimeOffer(instituteKey);
     const byHandle = Object.fromEntries(
@@ -531,12 +603,32 @@ async function handle(request: Request) {
         ];
       }),
     );
+    const byVariantId = Object.fromEntries(
+      variantIds.map((variantId) => {
+        const productInfo = productInfoByVariantId.get(variantId);
+        const percentage = getMatchingCategoryPercentage(
+          productInfo?.collections ?? new Set<string>(),
+          rules,
+        );
+
+        return [
+          variantId,
+          {
+            percentage,
+            eligible: percentage > 0,
+          },
+        ];
+      }),
+    );
 
     return json({
       ok: true,
       instituteKey,
-      eligible: Object.values(byHandle).some((entry) => Boolean((entry as { eligible?: boolean }).eligible)),
+      eligible: [...Object.values(byHandle), ...Object.values(byVariantId)].some((entry) =>
+        Boolean((entry as { eligible?: boolean }).eligible),
+      ),
       byHandle,
+      byVariantId,
       proxyVerified,
       via,
     });

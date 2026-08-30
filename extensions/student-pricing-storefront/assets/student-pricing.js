@@ -35,6 +35,15 @@
   const LIMITED_OFFER_HANDLE = "iphone-17e";
   const LIMITED_OFFER_TITLE = "13-inch macbook neo";
   const LIMITED_OFFER_STORAGE = "256gb no touch id";
+  const APPLECARE_TEXT_PATTERN = /apple\s*care\+?/i;
+  const APPLECARE_PRICE_SELECTOR = [
+    PRICE_SELECTOR,
+    "span",
+    "p",
+    "strong",
+    "b",
+    "div"
+  ].join(",");
   const FALLBACK_PROTECTED_COLLECTION_HANDLES = ["bundle", "all-bundles"];
   const FALLBACK_PROTECTED_PRODUCT_HANDLES = ["primary-years-bundle"];
   let PROTECTED_COLLECTION_HANDLES = new Set(FALLBACK_PROTECTED_COLLECTION_HANDLES);
@@ -69,6 +78,78 @@
   function extractCollectionHandleFromPath(pathname) {
     const match = String(pathname || "").match(/\/collections\/([^/?#]+)/i);
     return match ? decodeURIComponent(match[1]).trim().toLowerCase() : "";
+  }
+
+  function normalizeVariantId(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (raw.startsWith("gid://shopify/ProductVariant/")) return raw;
+    const numericMatch = raw.match(/\d{8,}/);
+    return numericMatch ? `gid://shopify/ProductVariant/${numericMatch[0]}` : "";
+  }
+
+  function getVariantIdFromRoot(root) {
+    if (!(root instanceof HTMLElement)) return "";
+
+    const datasetVariant =
+      root.dataset.variantId ||
+      root.dataset.productVariantId ||
+      root.dataset.studentPricingVariantId ||
+      "";
+    const normalizedDatasetVariant = normalizeVariantId(datasetVariant);
+    if (normalizedDatasetVariant) return normalizedDatasetVariant;
+
+    const variantCarrier = root.querySelector(
+      "[data-variant-id], [data-product-variant-id], [data-student-pricing-variant-id]"
+    );
+    if (variantCarrier instanceof HTMLElement) {
+      const normalizedCarrierVariant = normalizeVariantId(
+        variantCarrier.dataset.variantId ||
+          variantCarrier.dataset.productVariantId ||
+          variantCarrier.dataset.studentPricingVariantId ||
+          ""
+      );
+      if (normalizedCarrierVariant) return normalizedCarrierVariant;
+    }
+
+    const variantInput = root.querySelector(
+      'input[name="id"], select[name="id"], input[name="variant"], select[name="variant"]'
+    );
+    if (variantInput instanceof HTMLInputElement || variantInput instanceof HTMLSelectElement) {
+      return normalizeVariantId(variantInput.value);
+    }
+
+    return "";
+  }
+
+  function getHandleFromRoot(root) {
+    if (!(root instanceof HTMLElement)) return "";
+
+    const datasetHandle =
+      root.dataset.productHandle ||
+      root.dataset.handle ||
+      root.dataset.studentPricingProductHandle ||
+      "";
+    if (datasetHandle) return String(datasetHandle).trim().toLowerCase();
+
+    const handleCarrier = root.querySelector(
+      "[data-product-handle], [data-handle], [data-student-pricing-product-handle]"
+    );
+    if (handleCarrier instanceof HTMLElement) {
+      const carrierHandle =
+        handleCarrier.dataset.productHandle ||
+        handleCarrier.dataset.handle ||
+        handleCarrier.dataset.studentPricingProductHandle ||
+        "";
+      if (carrierHandle) return String(carrierHandle).trim().toLowerCase();
+    }
+
+    const productLink = root.querySelector('a[href*="/products/"]');
+    if (productLink instanceof HTMLAnchorElement) {
+      return extractHandleFromPath(productLink.getAttribute("href"));
+    }
+
+    return "";
   }
 
   function getCustomerId(config) {
@@ -252,6 +333,40 @@
     return matches;
   }
 
+  function findAppleCarePriceElements(root) {
+    const candidates = root.querySelectorAll(APPLECARE_PRICE_SELECTOR);
+    const matches = [];
+    const seen = new Set();
+
+    for (const candidate of candidates) {
+      if (!(candidate instanceof HTMLElement)) continue;
+      if (candidate === root) continue;
+      if (isIgnoredPriceElement(candidate)) continue;
+
+      const text = String(candidate.textContent || "").replace(/\s+/g, " ").trim();
+      if (!/\d/.test(text)) continue;
+      if (!/(sar|ر\.?س|ريال|price)/i.test(text)) continue;
+
+      const parsed = parseMoney(text);
+      if (!parsed || parsed.amount <= 0) continue;
+
+      const childWithMoney = Array.from(candidate.children).some((child) => {
+        if (!(child instanceof HTMLElement)) return false;
+        const childText = String(child.textContent || "").replace(/\s+/g, " ").trim();
+        return /\d/.test(childText) && /(sar|ر\.?س|ريال|price)/i.test(childText);
+      });
+      if (childWithMoney) continue;
+
+      const style = window.getComputedStyle(candidate);
+      if (style.display === "none" || style.visibility === "hidden") continue;
+      if (seen.has(candidate)) continue;
+      seen.add(candidate);
+      matches.push(candidate);
+    }
+
+    return matches.length ? matches : findVisiblePriceElements(root);
+  }
+
   function parseMoney(text) {
     const value = String(text || "").replace(/\s+/g, " ").trim();
     const match = value.match(/(\d[\d.,\s]*)/);
@@ -419,15 +534,66 @@
       targets.push({ handle: LIMITED_OFFER_HANDLE, priceElements, key });
     }
 
+    const explicitAppleCareRoots = document.querySelectorAll(
+      "[data-student-pricing-product-handle], [data-product-handle], [data-student-pricing-variant-id], [data-variant-id], [data-product-variant-id]"
+    );
+    for (const root of explicitAppleCareRoots) {
+      if (!(root instanceof HTMLElement)) continue;
+      const text = String(root.textContent || "");
+      if (!APPLECARE_TEXT_PATTERN.test(text)) continue;
+
+      const handle = getHandleFromRoot(root);
+      const variantId = getVariantIdFromRoot(root);
+      if (!handle && !variantId) continue;
+
+      const priceElements = findAppleCarePriceElements(root);
+      if (!priceElements.length) continue;
+
+      const targetId = handle || variantId;
+      if (!root.dataset.studentPricingKey) {
+        root.dataset.studentPricingKey = `${targetId}-applecare-${seen.size + 1}`;
+      }
+      const key = `${targetId}::${root.dataset.studentPricingKey}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      targets.push({ handle, variantId, priceElements, key });
+    }
+
+    const appleCareRoots = document.querySelectorAll(CARD_ROOT_SELECTOR);
+    for (const root of appleCareRoots) {
+      if (!(root instanceof HTMLElement)) continue;
+      const text = String(root.textContent || "");
+      if (!APPLECARE_TEXT_PATTERN.test(text)) continue;
+
+      const handle = getHandleFromRoot(root);
+      const variantId = getVariantIdFromRoot(root);
+      if (!handle && !variantId) continue;
+
+      const priceElements = findAppleCarePriceElements(root);
+      if (!priceElements.length) continue;
+
+      const targetId = handle || variantId;
+      if (!root.dataset.studentPricingKey) {
+        root.dataset.studentPricingKey = `${targetId}-applecare-${seen.size + 1}`;
+      }
+      const key = `${targetId}::${root.dataset.studentPricingKey}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      targets.push({ handle, variantId, priceElements, key });
+    }
+
     return targets;
   }
 
-  async function fetchPricing(config, handles) {
+  async function fetchPricing(config, handles, variantIds) {
     const endpoint = config.dataset.endpoint || "/apps/student-automatic-discount/proxy/student-pricing";
     const url = new URL(endpoint, window.location.origin);
     url.searchParams.set("shop", getShopDomain(config));
     url.searchParams.set("logged_in_customer_id", config.dataset.customerId || "");
     url.searchParams.set("handles", handles.join(","));
+    if (variantIds.length) {
+      url.searchParams.set("variant_ids", variantIds.join(","));
+    }
 
     const response = await fetch(url.toString(), {
       credentials: "same-origin",
@@ -549,10 +715,11 @@
 
     if (!targets.length) return;
 
-    const handles = Array.from(new Set(targets.map((target) => target.handle)));
+    const handles = Array.from(new Set(targets.map((target) => target.handle).filter(Boolean)));
+    const variantIds = Array.from(new Set(targets.map((target) => target.variantId).filter(Boolean)));
     let payload;
     try {
-      payload = await fetchPricing(config, handles);
+      payload = await fetchPricing(config, handles, variantIds);
     } catch (error) {
       console.warn("[student-pricing] failed to fetch pricing", error);
       return;
@@ -575,7 +742,9 @@
 
     try {
       for (const target of targets) {
-        const pricing = payload.byHandle[target.handle];
+        const pricing =
+          (target.handle && payload.byHandle[target.handle]) ||
+          (target.variantId && payload.byVariantId && payload.byVariantId[target.variantId]);
         const percentage = Number(pricing && pricing.percentage);
         const fixedDiscountedAmount = Number(pricing && pricing.discountedAmount);
         const hasFixedDiscountedAmount = Number.isFinite(fixedDiscountedAmount) && fixedDiscountedAmount > 0;
