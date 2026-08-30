@@ -100,26 +100,48 @@
     if (normalizedDatasetVariant) return normalizedDatasetVariant;
 
     const variantCarrier = root.querySelector(
-      "[data-variant-id], [data-product-variant-id], [data-student-pricing-variant-id]"
+      "[data-variant-id], [data-product-variant-id], [data-student-pricing-variant-id], [data-id], [data-variant], [data-variantid]"
     );
     if (variantCarrier instanceof HTMLElement) {
       const normalizedCarrierVariant = normalizeVariantId(
         variantCarrier.dataset.variantId ||
           variantCarrier.dataset.productVariantId ||
           variantCarrier.dataset.studentPricingVariantId ||
+          variantCarrier.dataset.id ||
+          variantCarrier.dataset.variant ||
+          variantCarrier.dataset.variantid ||
           ""
       );
       if (normalizedCarrierVariant) return normalizedCarrierVariant;
     }
 
     const variantInput = root.querySelector(
-      'input[name="id"], select[name="id"], input[name="variant"], select[name="variant"]'
+      'input[name="id"], select[name="id"], input[name="variant"], select[name="variant"], button[name="id"], button[value]'
     );
-    if (variantInput instanceof HTMLInputElement || variantInput instanceof HTMLSelectElement) {
+    if (
+      variantInput instanceof HTMLInputElement ||
+      variantInput instanceof HTMLSelectElement ||
+      variantInput instanceof HTMLButtonElement
+    ) {
       return normalizeVariantId(variantInput.value);
     }
 
     return "";
+  }
+
+  function findAppleCareContainer(element) {
+    let current = element instanceof HTMLElement ? element : null;
+    let steps = 0;
+
+    while (current && current !== document.body && steps < 8) {
+      if (APPLECARE_TEXT_PATTERN.test(String(current.textContent || ""))) {
+        return current;
+      }
+      current = current.parentElement;
+      steps += 1;
+    }
+
+    return null;
   }
 
   function getHandleFromRoot(root) {
@@ -401,6 +423,18 @@
     return `${parsedMoney.prefix}${discountedAmount.toFixed(Math.min(Math.max(parsedMoney.decimals, 0), 2))}${parsedMoney.suffix}`.trim();
   }
 
+  function setPriceElementAmount(priceElement, amount) {
+    const parsedMoney = parseMoney(getOriginalPriceText(priceElement)) || {
+      prefix: "",
+      suffix: "",
+      decimals: 2
+    };
+    const updatedText = formatMoney(parsedMoney, amount);
+    priceElement.textContent = updatedText;
+    priceElement.dataset.studentPricingOriginalText = updatedText;
+    return parseMoney(updatedText);
+  }
+
   function getOriginalPriceText(priceElement) {
     const stored = String(priceElement.dataset.studentPricingOriginalText || "").trim();
     if (stored) return stored;
@@ -535,12 +569,12 @@
     }
 
     const explicitAppleCareRoots = document.querySelectorAll(
-      "[data-student-pricing-product-handle], [data-product-handle], [data-student-pricing-variant-id], [data-variant-id], [data-product-variant-id]"
+      "[data-student-pricing-product-handle], [data-product-handle], [data-student-pricing-variant-id], [data-variant-id], [data-product-variant-id], [data-id], [data-variant], [data-variantid], button[value], input[value]"
     );
-    for (const root of explicitAppleCareRoots) {
+    for (const marker of explicitAppleCareRoots) {
+      if (!(marker instanceof HTMLElement)) continue;
+      const root = findAppleCareContainer(marker);
       if (!(root instanceof HTMLElement)) continue;
-      const text = String(root.textContent || "");
-      if (!APPLECARE_TEXT_PATTERN.test(text)) continue;
 
       const handle = getHandleFromRoot(root);
       const variantId = getVariantIdFromRoot(root);
@@ -746,9 +780,11 @@
           (target.handle && payload.byHandle[target.handle]) ||
           (target.variantId && payload.byVariantId && payload.byVariantId[target.variantId]);
         const percentage = Number(pricing && pricing.percentage);
+        const originalAmount = Number(pricing && pricing.originalAmount);
+        const hasOriginalAmount = target.variantId && Number.isFinite(originalAmount) && originalAmount > 0;
         const fixedDiscountedAmount = Number(pricing && pricing.discountedAmount);
         const hasFixedDiscountedAmount = Number.isFinite(fixedDiscountedAmount) && fixedDiscountedAmount > 0;
-        if (!hasFixedDiscountedAmount && (!Number.isFinite(percentage) || percentage <= 0)) {
+        if (!hasOriginalAmount && !hasFixedDiscountedAmount && (!Number.isFinite(percentage) || percentage <= 0)) {
           for (const priceElement of target.priceElements) {
             removePreview(priceElement);
           }
@@ -756,9 +792,16 @@
         }
 
         for (const priceElement of target.priceElements) {
-          const parsedMoney = parseMoney(getOriginalPriceText(priceElement));
+          const parsedMoney = hasOriginalAmount
+            ? setPriceElementAmount(priceElement, originalAmount)
+            : parseMoney(getOriginalPriceText(priceElement));
           if (!parsedMoney || parsedMoney.amount <= 0) continue;
           if (target.handle === LIMITED_OFFER_HANDLE && !isLimitedOfferOriginalPrice(parsedMoney)) continue;
+
+          if (!hasFixedDiscountedAmount && (!Number.isFinite(percentage) || percentage <= 0)) {
+            removePreview(priceElement);
+            continue;
+          }
 
           const discountedAmount = hasFixedDiscountedAmount
             ? fixedDiscountedAmount

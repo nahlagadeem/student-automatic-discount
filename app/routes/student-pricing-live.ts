@@ -29,12 +29,14 @@ type ProductNode = {
 
 type ProductVariantNode = {
   id?: string | null;
+  price?: string | null;
   product?: ProductNode | null;
 };
 
 type ProductInfo = {
   id: string;
   collections: Set<string>;
+  price?: number | null;
 };
 
 type CustomerNode = {
@@ -380,6 +382,7 @@ async function getVariantProductInfoMap(admin: GraphqlClient, variantIds: string
         nodes(ids: $ids) {
           ... on ProductVariant {
             id
+            price
             product {
               id
               handle
@@ -411,6 +414,7 @@ async function getVariantProductInfoMap(admin: GraphqlClient, variantIds: string
     map.set(variantId, {
       id: String(product.id || "").trim(),
       collections,
+      price: Number.isFinite(Number(variant.price)) ? Number(variant.price) : null,
     });
   }
 
@@ -599,6 +603,7 @@ async function handle(request: Request) {
           {
             percentage,
             eligible: percentage > 0,
+            originalAmount: productInfo?.price ?? null,
           },
         ];
       }),
