@@ -57,21 +57,6 @@
     "div",
     "li"
   ].join(",");
-  const APPLECARE_PORTAL_PRICES = [
-    { match: ["13 inch macbook neo", "macbook neo", "a18 pro"], amount: 688.6568 },
-    { match: ["13 inch macbook air", "macbook air 13", "m5"], amount: 989.2116 },
-    { match: ["15 inch macbook air", "macbook air 15", "m5"], amount: 1086.4464 },
-    { match: ["imac", "m4"], amount: 838.91925 },
-    { match: ["14 inch macbook pro", "macbook pro 14", "m5"], amount: 1280.916 },
-    { match: ["ipad", "a16"], amount: 352.7303 },
-    { match: ["ipad mini", "a17 pro"], amount: 352.7303 },
-    { match: ["ipad air 11", "11 inch ipad air", "m4"], amount: 405.7729 },
-    { match: ["ipad air 13", "13 inch ipad air", "m4"], amount: 503.0077 },
-    { match: ["ipad pro 11", "11 inch ipad pro", "m5"], amount: 697.49225 },
-    { match: ["ipad pro 13", "13 inch ipad pro", "m5"], amount: 794.72705 },
-    { match: ["apple tv"], amount: 149.4103 },
-    { match: ["apple watch series 11"], amount: 404.5815 }
-  ];
   const FALLBACK_PROTECTED_COLLECTION_HANDLES = ["bundle", "all-bundles"];
   const FALLBACK_PROTECTED_PRODUCT_HANDLES = ["primary-years-bundle"];
   let PROTECTED_COLLECTION_HANDLES = new Set(FALLBACK_PROTECTED_COLLECTION_HANDLES);
@@ -114,61 +99,6 @@
     if (raw.startsWith("gid://shopify/ProductVariant/")) return raw;
     const numericMatch = raw.match(/\d{8,}/);
     return numericMatch ? `gid://shopify/ProductVariant/${numericMatch[0]}` : "";
-  }
-
-  function normalizeComparableText(value) {
-    return String(value || "")
-      .toLowerCase()
-      .replace(/\+/g, " plus ")
-      .replace(/["']/g, "")
-      .replace(/-/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  function getCurrentProductContextText(root) {
-    const titleParts = [];
-    const selectors = [
-      "h1",
-      "[class*='product__title']",
-      "[class*='product-title']",
-      "[data-product-title]",
-      "[name='id'] option:checked",
-      "variant-selects select option:checked",
-      "variant-radios input:checked + label"
-    ];
-
-    for (const selector of selectors) {
-      const nodes = document.querySelectorAll(selector);
-      for (const node of nodes) {
-        titleParts.push(node.textContent || node.getAttribute("value") || "");
-      }
-    }
-
-    titleParts.push(document.title || "");
-    if (root instanceof HTMLElement) {
-      titleParts.push(root.textContent || "");
-    }
-
-    return normalizeComparableText(titleParts.join(" "));
-  }
-
-  function getPortalAppleCareAmount(root) {
-    const contextText = getCurrentProductContextText(root);
-    if (!contextText) return null;
-
-    const matches = APPLECARE_PORTAL_PRICES
-      .map((entry) => ({
-        entry,
-        score: entry.match.reduce((score, phrase) => {
-          const normalizedPhrase = normalizeComparableText(phrase);
-          return normalizedPhrase && contextText.includes(normalizedPhrase) ? score + 1 : score;
-        }, 0)
-      }))
-      .filter((item) => item.score > 0)
-      .sort((left, right) => right.score - left.score || right.entry.match.join(" ").length - left.entry.match.join(" ").length);
-
-    return matches.length ? matches[0].entry.amount : null;
   }
 
   function getVariantIdFromRoot(root) {
@@ -591,54 +521,6 @@
     }
   }
 
-  async function fetchCartAppleCareAmount() {
-    const root =
-      (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) ||
-      "/";
-
-    const response = await fetch(`${root}cart.js`, {
-      method: "GET",
-      credentials: "same-origin",
-      headers: { Accept: "application/json" }
-    });
-
-    if (!response.ok) return null;
-
-    const cart = await response.json().catch(() => null);
-    const items = Array.isArray(cart && cart.items) ? cart.items : [];
-    const appleCareItem = items.find((item) => {
-      const title = `${item.product_title || ""} ${item.title || ""} ${item.variant_title || ""}`;
-      return APPLECARE_TEXT_PATTERN.test(title);
-    });
-
-    if (!appleCareItem) return null;
-
-    const quantity = Number(appleCareItem.quantity) || 1;
-    const cents =
-      Number.isFinite(Number(appleCareItem.final_line_price)) && Number(appleCareItem.final_line_price) > 0
-        ? Number(appleCareItem.final_line_price) / quantity
-        : Number.isFinite(Number(appleCareItem.final_price)) && Number(appleCareItem.final_price) > 0
-          ? Number(appleCareItem.final_price)
-          : Number.isFinite(Number(appleCareItem.price)) && Number(appleCareItem.price) > 0
-            ? Number(appleCareItem.price)
-            : 0;
-
-    const amount = cents / 100;
-    return Number.isFinite(amount) && amount > 0 ? amount : null;
-  }
-
-  function applyAppleCareCartAmount(targets, amount) {
-    if (!Number.isFinite(amount) || amount <= 0) return;
-
-    for (const target of targets) {
-      if (!target.appleCareFallback) continue;
-      for (const priceElement of target.priceElements) {
-        setPriceElementAmount(priceElement, amount);
-        removePreview(priceElement);
-      }
-    }
-  }
-
   function collectTargets() {
     const targets = [];
     const seen = new Set();
@@ -737,22 +619,6 @@
       const priceElements = findAppleCarePriceElements(root);
       if (!priceElements.length) continue;
 
-      if (!handle && !variantId) {
-        if (!root.dataset.studentPricingKey) {
-          root.dataset.studentPricingKey = `applecare-cart-${seen.size + 1}`;
-        }
-        const key = `applecare-cart::${root.dataset.studentPricingKey}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        targets.push({
-          appleCareFallback: true,
-          portalAppleCareAmount: getPortalAppleCareAmount(root),
-          priceElements,
-          key
-        });
-        continue;
-      }
-
       const targetId = handle || variantId;
       if (!root.dataset.studentPricingKey) {
         root.dataset.studentPricingKey = `${targetId}-applecare-${seen.size + 1}`;
@@ -763,7 +629,6 @@
       targets.push({
         handle,
         variantId,
-        portalAppleCareAmount: getPortalAppleCareAmount(root),
         priceElements,
         key
       });
@@ -902,24 +767,7 @@
 
     if (!targets.length) return;
 
-    for (const target of targets) {
-      const portalAmount = Number(target.portalAppleCareAmount);
-      if (!Number.isFinite(portalAmount) || portalAmount <= 0) continue;
-      for (const priceElement of target.priceElements) {
-        setPriceElementAmount(priceElement, portalAmount);
-        removePreview(priceElement);
-      }
-    }
-
-    const cartAppleCareAmount = await fetchCartAppleCareAmount().catch((error) => {
-      console.warn("[student-pricing] failed to fetch cart AppleCare price", error);
-      return null;
-    });
-    if (cartAppleCareAmount) {
-      applyAppleCareCartAmount(targets, cartAppleCareAmount);
-    }
-
-    const pricedTargets = targets.filter((target) => !target.appleCareFallback);
+    const pricedTargets = targets;
     if (!pricedTargets.length) return;
 
     const handles = Array.from(new Set(pricedTargets.map((target) => target.handle).filter(Boolean)));
